@@ -1,0 +1,7 @@
+.DS_Store
+lay.ai-backend
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
