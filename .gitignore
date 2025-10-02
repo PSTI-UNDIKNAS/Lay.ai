@@ -5,3 +5,6 @@ lay.ai-backend
 *.dll
 *.so
 *.dylib
+.env
+*.env
+*.env.local

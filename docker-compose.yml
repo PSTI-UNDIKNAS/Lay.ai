@@ -1,0 +1,27 @@
+services:
+  database:
+    image: postgres:17-alpine
+    restart: unless-stopped
+    environment:
+      # These values are now read from your .env file
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+    ports:
+      - "${DB_PORT}:5433" # Use variables for ports too
+    volumes:
+      - db-data:/var/lib/postgresql/data
+
+  backend:
+    build: ./apps/backend
+    restart: unless-stopped
+    ports:
+      - "${BACKEND_PORT}:8080"
+    environment:
+      # You can pass variables to your backend app too
+      DATABASE_URL: "postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@database:${DB_PORT}/${POSTGRES_DB}?sslmode=disable"
+    depends_on:
+      - database
+
+volumes:
+  db-data:
