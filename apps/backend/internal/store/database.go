@@ -35,3 +35,8 @@ func NewStore() (*Store, error) {
 
 	return &Store{db: dbpool}, nil
 }
+
+// GetDB returns the database connection pool
+func (s *Store) GetDB() *pgxpool.Pool {
+	return s.db
+}
