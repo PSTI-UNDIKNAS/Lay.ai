@@ -46,13 +46,13 @@ func (h *AuthHandler) RegisterUserHandler(c *gin.Context) {
 	user, err := h.authService.RegisterUser(req.Name, req.Email, req.NIM, req.Password, req.Role)
 	if err != nil {
 		// Check if it's a duplicate email error
-		if err.Error() == "email already exists" {
+		if err.Error() == "failed to create user: failed to insert user: ERROR: duplicate key value violates unique constraint \"users_email_key\" (SQLSTATE 23505)" {
 			c.JSON(http.StatusConflict, gin.H{
-				"error": "Email already exists",
+				"error": "Email already been used please use another email or try login instead",
 			})
 			return
 		}
-		
+
 		c.JSON(http.StatusInternalServerError, gin.H{
 			"error":   "Failed to register user",
 			"details": err.Error(),

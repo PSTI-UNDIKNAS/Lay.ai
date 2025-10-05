@@ -55,8 +55,8 @@ func (s *UserStore) CreateUser(user *models.User) (*models.User, error) {
 	err := row.Scan(&user.ID, &user.CreatedAt, &user.UpdatedAt)
 	if err != nil {
 		// Check if it's a unique constraint violation (duplicate email)
-		if err.Error() == "UNIQUE constraint failed: users.email" ||
-			err.Error() == `pq: duplicate key value violates unique constraint "users_email_key"` {
+		if err.Error() == "UNIQUE constraint failed: users.email" || 
+		   err.Error() == `pq: duplicate key value violates unique constraint "users_email_key"` {
 			return nil, fmt.Errorf("email already exists")
 		}
 		return nil, fmt.Errorf("failed to insert user: %w", err)
@@ -75,7 +75,7 @@ func (s *UserStore) GetUserByEmail(email string) (*models.User, error) {
 
 	var user models.User
 	row := s.db.QueryRow(context.Background(), query, email)
-
+	
 	err := row.Scan(
 		&user.ID,
 		&user.Name,
@@ -87,7 +87,7 @@ func (s *UserStore) GetUserByEmail(email string) (*models.User, error) {
 		&user.CreatedAt,
 		&user.UpdatedAt,
 	)
-
+	
 	if err != nil {
 		if err == pgx.ErrNoRows {
 			return nil, fmt.Errorf("user not found")
