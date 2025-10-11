@@ -7,14 +7,14 @@ export
 ## migrate-up: applies all new 'up' migrations
 migrate-up:
 	@echo "Running database migrations up..."
-	docker run --rm --network host -v "$(CURDIR)/migrations:/migrations" migrate/migrate \
+	docker run --rm --network layaiai_default -v "$(CURDIR)/migrations:/migrations" migrate/migrate \
 	-path /migrations -database "${DATABASE_URL}" \
 	up
 
 ## migrate-down: reverts the very last 'up' migration
 migrate-down:
 	@echo "Reverting last database migration..."
-	docker run --rm --network host -v "$(CURDIR)/migrations:/migrations" migrate/migrate \
+	docker run --rm --network layaiai_default -v "$(CURDIR)/migrations:/migrations" migrate/migrate \
 	-path /migrations -database "${DATABASE_URL}" \
 	down 1
 

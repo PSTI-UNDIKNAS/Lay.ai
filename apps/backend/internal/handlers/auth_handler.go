@@ -34,16 +34,16 @@ func (h *AuthHandler) RegisterUserHandler(c *gin.Context) {
 		return
 	}
 
-	// Validate that required fields are not empty (additional validation)
-	if req.Name == "" || req.Email == "" || req.Password == "" || req.Role == "" {
-		c.JSON(http.StatusBadRequest, gin.H{
-			"error": "All fields (name, email, password, role) are required",
-		})
-		return
-	}
+    // Validate that required fields are not empty (additional validation)
+    if req.Name == "" || req.Email == "" || req.Password == "" || req.Role == "" || req.UniqueIdentifier == "" {
+        c.JSON(http.StatusBadRequest, gin.H{
+            "error": "All fields (name, email, unique_identifier, password, role) are required",
+        })
+        return
+    }
 
 	// Call AuthService to do the real work
-	user, err := h.authService.RegisterUser(req.Name, req.Email, req.NIM, req.Password, req.Role)
+	user, err := h.authService.RegisterUser(req.Name, req.Email, req.UniqueIdentifier, req.Password, req.Role)
 	if err != nil {
 		// Check if it's a duplicate email error
 		if err.Error() == "failed to create user: failed to insert user: ERROR: duplicate key value violates unique constraint \"users_email_key\" (SQLSTATE 23505)" {
@@ -62,12 +62,12 @@ func (h *AuthHandler) RegisterUserHandler(c *gin.Context) {
 
 	// Send back successful response
 	response := models.RegisterResponse{
-		ID:     user.ID,
-		Name:   user.Name,
-		Email:  user.Email,
-		NIM:    user.NIM,
-		Role:   user.Role,
-		Status: user.Status,
+		ID:               user.ID,
+		Name:             user.Name,
+		Email:            user.Email,
+		UniqueIdentifier: user.UniqueIdentifier,
+		Role:             user.Role,
+		Status:           user.Status,
 	}
 
 	c.JSON(http.StatusCreated, gin.H{

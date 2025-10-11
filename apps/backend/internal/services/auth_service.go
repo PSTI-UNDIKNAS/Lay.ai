@@ -22,7 +22,7 @@ func NewAuthService(userStore *store.UserStore) *AuthService {
 }
 
 // RegisterUser handles user registration business logic
-func (s *AuthService) RegisterUser(name, email string, nim *string, password string, role models.UserRole) (*models.User, error) {
+func (s *AuthService) RegisterUser(name, email string, uniqueIdentifier string, password string, role models.UserRole) (*models.User, error) {
 	// Hash the password using bcrypt (critical security step)
 	hashedPassword, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
 	if err != nil {
@@ -31,12 +31,12 @@ func (s *AuthService) RegisterUser(name, email string, nim *string, password str
 
 	// Create user object with hashed password
 	user := &models.User{
-		Name:         name,
-		Email:        email,
-		NIM:          nim,
-		PasswordHash: string(hashedPassword),
-		Role:         role,
-		Status:       models.StatusActive, // Default status
+		Name:             name,
+		Email:            email,
+		UniqueIdentifier: uniqueIdentifier,
+		PasswordHash:     string(hashedPassword),
+		Role:             role,
+		Status:           models.StatusActive, // Default status
 	}
 
 	// Call UserStore to save the user to the database

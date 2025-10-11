@@ -8,3 +8,5 @@ lay.ai-backend
 .env
 *.env
 *.env.local
+apps/backend/api
+*project-bible.md

@@ -27,7 +27,7 @@ func NewUserStore(db *pgxpool.Pool) *UserStore {
 func (s *UserStore) CreateUser(user *models.User) (*models.User, error) {
 	// SQL query to insert a new user
 	query := `
-		INSERT INTO users (name, email, nim, password_hash, role, status, created_at, updated_at)
+		INSERT INTO users (name, email, unique_identifier, password_hash, role, status, created_at, updated_at)
 		VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
 		RETURNING id, created_at, updated_at
 	`
@@ -43,7 +43,7 @@ func (s *UserStore) CreateUser(user *models.User) (*models.User, error) {
 		query,
 		user.Name,
 		user.Email,
-		user.NIM,
+		user.UniqueIdentifier,
 		user.PasswordHash,
 		user.Role,
 		user.Status,
@@ -68,7 +68,7 @@ func (s *UserStore) CreateUser(user *models.User) (*models.User, error) {
 // GetUserByEmail retrieves a user by email
 func (s *UserStore) GetUserByEmail(email string) (*models.User, error) {
 	query := `
-		SELECT id, name, email, nim, password_hash, role, status, created_at, updated_at
+		SELECT id, name, email, unique_identifier, password_hash, role, status, created_at, updated_at
 		FROM users
 		WHERE email = $1
 	`
@@ -80,7 +80,7 @@ func (s *UserStore) GetUserByEmail(email string) (*models.User, error) {
 		&user.ID,
 		&user.Name,
 		&user.Email,
-		&user.NIM,
+		&user.UniqueIdentifier,
 		&user.PasswordHash,
 		&user.Role,
 		&user.Status,
