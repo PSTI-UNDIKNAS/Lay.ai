@@ -54,3 +54,15 @@ type RegisterResponse struct {
 	Role             UserRole   `json:"role"`
 	Status           UserStatus `json:"status"`
 }
+
+// LoginRequest represents the request payload for user login
+type LoginRequest struct {
+	Email    string `json:"email" binding:"required,email"`
+	Password string `json:"password" binding:"required"`
+}
+
+// LoginResponse represents the response after successful login
+type LoginResponse struct {
+	Token string `json:"token"`
+	User  User   `json:"user"`
+}

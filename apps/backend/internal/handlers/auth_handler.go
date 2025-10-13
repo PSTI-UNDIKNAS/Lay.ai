@@ -75,3 +75,49 @@ func (h *AuthHandler) RegisterUserHandler(c *gin.Context) {
 		"user":    response,
 	})
 }
+
+// LoginUserHandler handles POST /api/auth/login
+func (h *AuthHandler) LoginUserHandler(c *gin.Context) {
+	var req models.LoginRequest
+
+	// Read and validate JSON data from request body
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"error":   "Invalid request data",
+			"details": err.Error(),
+		})
+		return
+	}
+
+	// Additional validation for required fields
+	if req.Email == "" || req.Password == "" {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"error": "Email and password are required",
+		})
+		return
+	}
+
+	// Call AuthService to authenticate user
+	loginResponse, err := h.authService.LoginUser(req.Email, req.Password)
+	if err != nil {
+		// Return generic error message for security (don't reveal if email exists)
+		c.JSON(http.StatusUnauthorized, gin.H{
+			"error": "Invalid email or password",
+		})
+		return
+	}
+
+	// Send back successful response with token and user info
+	c.JSON(http.StatusOK, gin.H{
+		"message": "Login successful",
+		"token":   loginResponse.Token,
+		"user": gin.H{
+			"id":                loginResponse.User.ID,
+			"name":              loginResponse.User.Name,
+			"email":             loginResponse.User.Email,
+			"unique_identifier": loginResponse.User.UniqueIdentifier,
+			"role":              loginResponse.User.Role,
+			"status":            loginResponse.User.Status,
+		},
+	})
+}

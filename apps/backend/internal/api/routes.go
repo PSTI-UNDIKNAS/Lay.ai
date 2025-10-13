@@ -36,8 +36,8 @@ func SetupRoutes(db *pgxpool.Pool) *gin.Engine {
 		auth := v1.Group("/auth")
 		{
 			auth.POST("/register", authHandler.RegisterUserHandler)
+			auth.POST("/login", authHandler.LoginUserHandler)
 			// Future auth endpoints can be added here:
-			// auth.POST("/login", authHandler.LoginHandler)
 			// auth.POST("/logout", authHandler.LogoutHandler)
 		}
 

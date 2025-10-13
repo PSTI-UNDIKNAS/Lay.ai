@@ -3,6 +3,7 @@ package main
 import (
 	"log"
 	"os"
+	"path/filepath"
 
 	"lay.ai/backend/internal/api"
 	"lay.ai/backend/internal/store"
@@ -11,9 +12,13 @@ import (
 )
 
 func main() {
-	// It's good practice to load .env here at the very start
-	if err := godotenv.Load("../../.env"); err != nil {
-		log.Println("No .env file found, using environment variables")
+	// Try to load .env file for local development
+	// In Docker, environment variables are passed directly via docker-compose
+	envPath := filepath.Join("..", "..", "..", "..", ".env")
+	if err := godotenv.Load(envPath); err != nil {
+		log.Println("No .env file found (normal in Docker), using environment variables")
+	} else {
+		log.Printf("Successfully loaded .env from: %s", envPath)
 	}
 
 	// Initialize database connection
