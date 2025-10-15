@@ -43,6 +43,14 @@ func (h *AuthHandler) RegisterUserHandler(c *gin.Context) {
         return
     }
 
+    // Security check: Prevent admin registration through public API
+    if req.Role == models.RoleAdmin {
+        c.JSON(http.StatusForbidden, gin.H{
+            "error": "Admin registration is not allowed through public API. Contact system administrator.",
+        })
+        return
+    }
+
 	// Call AuthService to do the real work
 	user, err := h.authService.RegisterUser(req.Name, req.Email, req.UniqueIdentifier, req.Password, req.Role)
 	if err != nil {

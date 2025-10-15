@@ -24,5 +24,20 @@ services:
     depends_on:
       - database
 
+  seed-admin:
+    image: golang:1.23-alpine
+    working_dir: /app
+    volumes:
+      - ./apps/backend:/app
+    environment:
+      DATABASE_URL: ${DATABASE_URL}
+    depends_on:
+      - database
+    command: go run ./cmd/seed-admin
+    profiles:
+      - tools  # This prevents it from starting automatically
+    stdin_open: true  # Enable interactive input
+    tty: true        # Enable TTY for interactive prompts
+
 volumes:
   db-data:

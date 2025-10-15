@@ -210,3 +210,49 @@ func AuthWithStatusMiddleware(authService *services.AuthService) gin.HandlerFunc
 		c.Next()
 	}
 }
+
+// AdminOnlyMiddleware ensures only admin users can access the endpoint
+func AdminOnlyMiddleware(authService *services.AuthService) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		// This middleware should be used after AuthWithStatusMiddleware
+		userID, exists := c.Get("user_id")
+		if !exists {
+			c.JSON(http.StatusUnauthorized, gin.H{
+				"error": "Authentication required",
+			})
+			c.Abort()
+			return
+		}
+
+		userIDStr, ok := userID.(string)
+		if !ok {
+			c.JSON(http.StatusInternalServerError, gin.H{
+				"error": "Invalid user ID format",
+			})
+			c.Abort()
+			return
+		}
+
+		// Fetch user from database to check role
+		user, err := authService.GetUserByID(userIDStr)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{
+				"error": "Failed to verify user permissions",
+			})
+			c.Abort()
+			return
+		}
+
+		// Check if user has admin role
+		if user.Role != models.RoleAdmin {
+			c.JSON(http.StatusForbidden, gin.H{
+				"error": "Admin access required",
+			})
+			c.Abort()
+			return
+		}
+
+		// Continue to next handler
+		c.Next()
+	}
+}

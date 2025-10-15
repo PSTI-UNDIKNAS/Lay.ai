@@ -10,3 +10,4 @@ lay.ai-backend
 *.env.local
 apps/backend/api
 *project-bible.md
+bin/

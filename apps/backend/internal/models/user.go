@@ -42,7 +42,7 @@ type RegisterRequest struct {
 	Email            string   `json:"email" binding:"required,email"`
 	UniqueIdentifier string   `json:"unique_identifier" binding:"required"`
 	Password         string   `json:"password" binding:"required,min=6"`
-	Role             UserRole `json:"role" binding:"required,oneof=student lecturer admin"`
+	Role             UserRole `json:"role" binding:"required,oneof=student lecturer"`
 }
 
 // RegisterResponse represents the response after successful registration

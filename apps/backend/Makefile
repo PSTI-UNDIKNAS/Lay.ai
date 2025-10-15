@@ -2,7 +2,9 @@ include ../../.env
 export
 
 # This tells 'make' that these are command names, not files.
-.PHONY: migrate-up migrate-down migrate-new
+.PHONY: migrate-up migrate-down migrate-new seed-admin help
+
+.DEFAULT_GOAL := help
 
 ## migrate-up: applies all new 'up' migrations
 migrate-up:
@@ -23,3 +25,28 @@ migrate-down:
 migrate-new:
 	@echo "Creating new migration files for ${name}..."
 	docker run --rm -v "$(CURDIR)/migrations:/migrations" migrate/migrate create -ext sql -dir /migrations -seq ${name}
+
+## seed-admin: creates an admin user interactively using Docker
+seed-admin:
+	@echo "🔐 Starting Admin User Creation Tool..."
+	@echo "This will run the seed-admin tool in a Docker container."
+	@echo "Make sure your database is running (docker-compose up -d database)"
+	@echo ""
+	cd ../.. && docker-compose run --rm seed-admin
+
+## help: shows available commands
+help:
+	@echo "-----------------------------------------------------------------------"
+	@echo "Available commands:"
+	@echo "-----------------------------------------------------------------------"
+	@echo "Database Migrations:"
+	@echo "  make migrate-up      - Apply all pending migrations"
+	@echo "  make migrate-down    - Revert the last migration"
+	@echo "  make migrate-new     - Create new migration files (usage: make migrate-new name=table_name)"
+	@echo "-----------------------------------------------------------------------"
+	@echo "Admin User Management:"
+	@echo "  make seed-admin      - Create admin user interactively (Docker) [RECOMMENDED]"
+	@echo "-----------------------------------------------------------------------"
+	@echo "Other:"
+	@echo "  make help           - Show this help message"
+	@echo "-----------------------------------------------------------------------"

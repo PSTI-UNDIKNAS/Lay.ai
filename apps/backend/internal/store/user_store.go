@@ -98,6 +98,70 @@ func (s *UserStore) GetUserByEmail(email string) (*models.User, error) {
 	return &user, nil
 }
 
+// GetPendingLecturers retrieves all lecturers with pending approval status
+func (s *UserStore) GetPendingLecturers() ([]*models.User, error) {
+	query := `
+		SELECT id, name, email, unique_identifier, password_hash, role, status, created_at, updated_at
+		FROM users
+		WHERE role = $1 AND status = $2
+		ORDER BY created_at ASC
+	`
+
+	rows, err := s.db.Query(context.Background(), query, models.RoleLecturer, models.StatusPendingApproval)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query pending lecturers: %w", err)
+	}
+	defer rows.Close()
+
+	var lecturers []*models.User
+	for rows.Next() {
+		var user models.User
+		err := rows.Scan(
+			&user.ID,
+			&user.Name,
+			&user.Email,
+			&user.UniqueIdentifier,
+			&user.PasswordHash,
+			&user.Role,
+			&user.Status,
+			&user.CreatedAt,
+			&user.UpdatedAt,
+		)
+		if err != nil {
+			return nil, fmt.Errorf("failed to scan lecturer: %w", err)
+		}
+		lecturers = append(lecturers, &user)
+	}
+
+	if err = rows.Err(); err != nil {
+		return nil, fmt.Errorf("error iterating over lecturer rows: %w", err)
+	}
+
+	return lecturers, nil
+}
+
+// UpdateUserStatus updates a user's status
+func (s *UserStore) UpdateUserStatus(userID string, status models.UserStatus) error {
+	query := `
+		UPDATE users 
+		SET status = $1, updated_at = $2
+		WHERE id = $3
+	`
+
+	now := time.Now()
+	result, err := s.db.Exec(context.Background(), query, status, now, userID)
+	if err != nil {
+		return fmt.Errorf("failed to update user status: %w", err)
+	}
+
+	rowsAffected := result.RowsAffected()
+	if rowsAffected == 0 {
+		return fmt.Errorf("user not found")
+	}
+
+	return nil
+}
+
 // GetUserByID retrieves a user by ID
 func (s *UserStore) GetUserByID(userID string) (*models.User, error) {
 	query := `

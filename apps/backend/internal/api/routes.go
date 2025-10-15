@@ -23,9 +23,11 @@ func SetupRoutes(db *pgxpool.Pool) *gin.Engine {
 
 	// Initialize services
 	authService := services.NewAuthService(userStore)
+	adminService := services.NewAdminService(userStore)
 
 	// Initialize handlers
 	authHandler := handlers.NewAuthHandler(authService)
+	adminHandler := handlers.NewAdminHandler(adminService)
 
 	// API v1 routes
 	v1 := router.Group("/api")
@@ -42,6 +44,16 @@ func SetupRoutes(db *pgxpool.Pool) *gin.Engine {
 			// Protected auth endpoints (require JWT token and active status)
 			auth.GET("/me", middleware.AuthWithStatusMiddleware(authService), authHandler.GetMeHandler)
 			auth.POST("/logout", middleware.AuthWithStatusMiddleware(authService), authHandler.LogoutHandler)
+		}
+
+		// Admin routes (Admin Only)
+		admin := v1.Group("/admin")
+		admin.Use(middleware.AuthWithStatusMiddleware(authService))
+		admin.Use(middleware.AdminOnlyMiddleware(authService))
+		{
+			// Lecturer approval endpoints
+			admin.GET("/lecturers", adminHandler.GetPendingLecturers)
+			admin.POST("/lecturers/:lecturerId/approve", adminHandler.ApproveLecturer)
 		}
 
 		// Future route groups can be added here:
