@@ -39,9 +39,9 @@ func SetupRoutes(db *pgxpool.Pool) *gin.Engine {
 			auth.POST("/register", authHandler.RegisterUserHandler)
 			auth.POST("/login", authHandler.LoginUserHandler)
 			
-			// Protected auth endpoints (require JWT token)
-			auth.GET("/me", middleware.AuthMiddleware(), authHandler.GetMeHandler)
-			auth.POST("/logout", middleware.AuthMiddleware(), authHandler.LogoutHandler)
+			// Protected auth endpoints (require JWT token and active status)
+			auth.GET("/me", middleware.AuthWithStatusMiddleware(authService), authHandler.GetMeHandler)
+			auth.POST("/logout", middleware.AuthWithStatusMiddleware(authService), authHandler.LogoutHandler)
 		}
 
 		// Future route groups can be added here:

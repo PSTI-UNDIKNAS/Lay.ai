@@ -3,6 +3,8 @@ package middleware
 import (
 	"net/http"
 
+	"lay.ai/backend/internal/models"
+	"lay.ai/backend/internal/services"
 	"lay.ai/backend/internal/utils"
 
 	"github.com/gin-gonic/gin"
@@ -143,4 +145,68 @@ func GetUserFromContext(c *gin.Context) (userID string, email string, authentica
 	}
 
 	return userID, email, true
+}
+
+// AuthWithStatusMiddleware validates JWT tokens and checks user status from database
+// This middleware requires an AuthService to check user status
+func AuthWithStatusMiddleware(authService *services.AuthService) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		// Get Authorization header
+		authHeader := c.GetHeader("Authorization")
+		if authHeader == "" {
+			c.JSON(http.StatusUnauthorized, gin.H{
+				"error": "Authorization header is required",
+			})
+			c.Abort()
+			return
+		}
+
+		// Extract token from header
+		token, err := utils.ExtractTokenFromHeader(authHeader)
+		if err != nil {
+			c.JSON(http.StatusUnauthorized, gin.H{
+				"error": err.Error(),
+			})
+			c.Abort()
+			return
+		}
+
+		// Validate token
+		claims, err := utils.ValidateJWT(token)
+		if err != nil {
+			c.JSON(http.StatusUnauthorized, gin.H{
+				"error": "Invalid or expired token",
+			})
+			c.Abort()
+			return
+		}
+
+		// Get user from database to check status
+		user, err := authService.GetUserByID(claims.UserID)
+		if err != nil {
+			c.JSON(http.StatusUnauthorized, gin.H{
+				"error": "User not found",
+			})
+			c.Abort()
+			return
+		}
+
+		// Check if user is active
+		if user.Status != models.StatusActive {
+			c.JSON(http.StatusForbidden, gin.H{
+				"error": "Account is not active. Please contact administrator for approval.",
+			})
+			c.Abort()
+			return
+		}
+
+		// Store user information in context for use in handlers
+		c.Set("user_id", claims.UserID)
+		c.Set("user_email", claims.Email)
+		c.Set("user_role", string(user.Role))
+		c.Set("user_status", string(user.Status))
+
+		// Continue to next handler
+		c.Next()
+	}
 }

@@ -30,6 +30,14 @@ func (s *AuthService) RegisterUser(name, email string, uniqueIdentifier string, 
 		return nil, fmt.Errorf("failed to hash password: %w", err)
 	}
 
+	// Determine user status based on role
+	var status models.UserStatus
+	if role == models.RoleLecturer {
+		status = models.StatusPendingApproval // Lecturers need approval
+	} else {
+		status = models.StatusActive // Students and admins are active by default
+	}
+
 	// Create user object with hashed password
 	user := &models.User{
 		Name:             name,
@@ -37,7 +45,7 @@ func (s *AuthService) RegisterUser(name, email string, uniqueIdentifier string, 
 		UniqueIdentifier: uniqueIdentifier,
 		PasswordHash:     string(hashedPassword),
 		Role:             role,
-		Status:           models.StatusActive, // Default status
+		Status:           status,
 	}
 
 	// Call UserStore to save the user to the database
