@@ -54,6 +54,13 @@ func SetupRoutes(db *pgxpool.Pool) *gin.Engine {
 			// Lecturer approval endpoints
 			admin.GET("/lecturers", adminHandler.GetPendingLecturers)
 			admin.POST("/lecturers/:lecturerId/approve", adminHandler.ApproveLecturer)
+			
+			// User management endpoints
+			admin.GET("/users", adminHandler.GetUsers)
+			admin.GET("/users/:userId", adminHandler.GetUserByID)
+			admin.POST("/users", adminHandler.CreateUser)
+			admin.PUT("/users/:userId", adminHandler.UpdateUser)
+			admin.DELETE("/users/:userId", adminHandler.DeleteUser)
 		}
 
 		// Future route groups can be added here:

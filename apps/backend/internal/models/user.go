@@ -21,6 +21,7 @@ type UserStatus string
 const (
 	StatusActive          UserStatus = "active"
 	StatusPendingApproval UserStatus = "pending_approval"
+	StatusInactive        UserStatus = "inactive"
 )
 
 // User represents a user in the system
