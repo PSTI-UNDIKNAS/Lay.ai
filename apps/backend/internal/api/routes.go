@@ -2,6 +2,7 @@ package api
 
 import (
 	"lay.ai/backend/internal/handlers"
+	"lay.ai/backend/internal/middleware"
 	"lay.ai/backend/internal/services"
 	"lay.ai/backend/internal/store"
 
@@ -37,8 +38,10 @@ func SetupRoutes(db *pgxpool.Pool) *gin.Engine {
 		{
 			auth.POST("/register", authHandler.RegisterUserHandler)
 			auth.POST("/login", authHandler.LoginUserHandler)
-			// Future auth endpoints can be added here:
-			// auth.POST("/logout", authHandler.LogoutHandler)
+			
+			// Protected auth endpoints (require JWT token)
+			auth.GET("/me", middleware.AuthMiddleware(), authHandler.GetMeHandler)
+			auth.POST("/logout", middleware.AuthMiddleware(), authHandler.LogoutHandler)
 		}
 
 		// Future route groups can be added here:

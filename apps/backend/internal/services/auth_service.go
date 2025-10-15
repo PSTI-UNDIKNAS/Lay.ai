@@ -98,3 +98,14 @@ func (s *AuthService) LoginUser(email, password string) (*models.LoginResponse, 
 
 	return response, nil
 }
+
+// GetUserByID retrieves a user by ID
+func (s *AuthService) GetUserByID(userID string) (*models.User, error) {
+	// Call UserStore to get the user by ID
+	user, err := s.userStore.GetUserByID(userID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get user: %w", err)
+	}
+
+	return user, nil
+}

@@ -97,3 +97,36 @@ func (s *UserStore) GetUserByEmail(email string) (*models.User, error) {
 
 	return &user, nil
 }
+
+// GetUserByID retrieves a user by ID
+func (s *UserStore) GetUserByID(userID string) (*models.User, error) {
+	query := `
+		SELECT id, name, email, unique_identifier, password_hash, role, status, created_at, updated_at
+		FROM users
+		WHERE id = $1
+	`
+
+	var user models.User
+	row := s.db.QueryRow(context.Background(), query, userID)
+	
+	err := row.Scan(
+		&user.ID,
+		&user.Name,
+		&user.Email,
+		&user.UniqueIdentifier,
+		&user.PasswordHash,
+		&user.Role,
+		&user.Status,
+		&user.CreatedAt,
+		&user.UpdatedAt,
+	)
+	
+	if err != nil {
+		if err == pgx.ErrNoRows {
+			return nil, fmt.Errorf("user not found")
+		}
+		return nil, fmt.Errorf("failed to get user: %w", err)
+	}
+
+	return &user, nil
+}

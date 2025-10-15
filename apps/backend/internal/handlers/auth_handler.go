@@ -3,6 +3,7 @@ package handlers
 import (
 	"net/http"
 
+	"lay.ai/backend/internal/middleware"
 	"lay.ai/backend/internal/models"
 	"lay.ai/backend/internal/services"
 
@@ -119,5 +120,60 @@ func (h *AuthHandler) LoginUserHandler(c *gin.Context) {
 			"role":              loginResponse.User.Role,
 			"status":            loginResponse.User.Status,
 		},
+	})
+}
+
+// GetMeHandler handles GET /api/auth/me
+func (h *AuthHandler) GetMeHandler(c *gin.Context) {
+	// Extract user information from context (set by AuthMiddleware)
+	userID, _, authenticated := middleware.GetUserFromContext(c)
+	if !authenticated {
+		c.JSON(http.StatusUnauthorized, gin.H{
+			"error": "Authentication required",
+		})
+		return
+	}
+
+	// Get user details from the service
+	user, err := h.authService.GetUserByID(userID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"error": "Failed to get user information",
+		})
+		return
+	}
+
+	// Return user information
+	c.JSON(http.StatusOK, gin.H{
+		"user": gin.H{
+			"id":                user.ID,
+			"name":              user.Name,
+			"email":             user.Email,
+			"unique_identifier": user.UniqueIdentifier,
+			"role":              user.Role,
+			"status":            user.Status,
+		},
+	})
+}
+
+// LogoutHandler handles POST /api/auth/logout
+func (h *AuthHandler) LogoutHandler(c *gin.Context) {
+	// Extract user information from context (set by AuthMiddleware)
+	userID, _, authenticated := middleware.GetUserFromContext(c)
+	if !authenticated {
+		c.JSON(http.StatusUnauthorized, gin.H{
+			"error": "Authentication required",
+		})
+		return
+	}
+
+	// In a stateless JWT implementation, logout is typically handled client-side
+	// by removing the token from storage. However, we can log the logout event
+	// or implement token blacklisting if needed in the future.
+	
+	// For now, we'll just return a success response
+	c.JSON(http.StatusOK, gin.H{
+		"message": "Logout successful",
+		"user_id": userID,
 	})
 }
