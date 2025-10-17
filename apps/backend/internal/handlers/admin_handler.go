@@ -10,12 +10,29 @@ import (
 )
 
 type AdminHandler struct {
-	adminService *services.AdminService
+	adminService        *services.AdminService
+	courseService       *services.CourseService
+	learningUnitService *services.LearningUnitService
+	assignmentService   *services.AssignmentService
+	quizService         *services.QuizService
+	submissionService   *services.SubmissionService
 }
 
-func NewAdminHandler(adminService *services.AdminService) *AdminHandler {
+func NewAdminHandler(
+	adminService *services.AdminService,
+	courseService *services.CourseService,
+	learningUnitService *services.LearningUnitService,
+	assignmentService *services.AssignmentService,
+	quizService *services.QuizService,
+	submissionService *services.SubmissionService,
+) *AdminHandler {
 	return &AdminHandler{
-		adminService: adminService,
+		adminService:        adminService,
+		courseService:       courseService,
+		learningUnitService: learningUnitService,
+		assignmentService:   assignmentService,
+		quizService:         quizService,
+		submissionService:   submissionService,
 	}
 }
 
@@ -466,6 +483,747 @@ func (h *AdminHandler) DeleteUser(c *gin.Context) {
 
 	c.JSON(http.StatusOK, gin.H{
 		"message": "User deleted successfully",
+		"success": true,
+	})
+}
+
+// ===== CONTENT MANAGEMENT HANDLERS =====
+
+// GetCourses handles GET /api/admin/courses
+func (h *AdminHandler) GetCourses(c *gin.Context) {
+	// Parse query parameters
+	limitStr := c.DefaultQuery("limit", "50")
+	offsetStr := c.DefaultQuery("offset", "0")
+	creatorID := c.Query("creator_id")
+
+	limit, err := strconv.Atoi(limitStr)
+	if err != nil || limit <= 0 {
+		limit = 50
+	}
+
+	offset, err := strconv.Atoi(offsetStr)
+	if err != nil || offset < 0 {
+		offset = 0
+	}
+
+	var creatorIDPtr *string
+	if creatorID != "" {
+		creatorIDPtr = &creatorID
+	}
+
+	courses, err := h.courseService.GetCourses(creatorIDPtr, limit, offset)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"error": "Failed to get courses",
+			"details": err.Error(),
+		})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"courses": courses,
+		"count":   len(courses),
+		"limit":   limit,
+		"offset":  offset,
+	})
+}
+
+// GetCourseByID handles GET /api/admin/courses/{courseId}
+func (h *AdminHandler) GetCourseByID(c *gin.Context) {
+	courseID := c.Param("courseId")
+	if courseID == "" {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"error": "Course ID is required",
+		})
+		return
+	}
+
+	course, err := h.courseService.GetCourseByID(courseID)
+	if err != nil {
+		if err.Error() == "course not found" {
+			c.JSON(http.StatusNotFound, gin.H{
+				"error": "Course not found",
+			})
+			return
+		}
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"error": "Failed to get course",
+			"details": err.Error(),
+		})
+		return
+	}
+
+	c.JSON(http.StatusOK, course)
+}
+
+// UpdateCourse handles PUT /api/admin/courses/{courseId}
+func (h *AdminHandler) UpdateCourse(c *gin.Context) {
+	courseID := c.Param("courseId")
+	if courseID == "" {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"error": "Course ID is required",
+		})
+		return
+	}
+
+	var req models.UpdateCourseRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"error": "Invalid request body",
+			"details": err.Error(),
+		})
+		return
+	}
+
+	// Convert to map for updates
+	updates := make(map[string]interface{})
+	if req.Title != "" {
+		updates["title"] = req.Title
+	}
+	if req.Description != "" {
+		updates["description"] = req.Description
+	}
+	if req.AccessType != "" {
+		updates["access_type"] = req.AccessType
+	}
+	if req.Password != "" {
+		updates["password"] = req.Password
+	}
+
+	course, err := h.courseService.UpdateCourse(courseID, updates)
+	if err != nil {
+		if err.Error() == "course not found" {
+			c.JSON(http.StatusNotFound, gin.H{
+				"error": "Course not found",
+			})
+			return
+		}
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"error": "Failed to update course",
+			"details": err.Error(),
+		})
+		return
+	}
+
+	c.JSON(http.StatusOK, course)
+}
+
+// DeleteCourse handles DELETE /api/admin/courses/{courseId}
+func (h *AdminHandler) DeleteCourse(c *gin.Context) {
+	courseID := c.Param("courseId")
+	if courseID == "" {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"error": "Course ID is required",
+		})
+		return
+	}
+
+	err := h.courseService.DeleteCourse(courseID)
+	if err != nil {
+		if err.Error() == "course not found" {
+			c.JSON(http.StatusNotFound, gin.H{
+				"error": "Course not found",
+			})
+			return
+		}
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"error": "Failed to delete course",
+			"details": err.Error(),
+		})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"message": "Course deleted successfully",
+		"success": true,
+	})
+}
+
+// GetLearningUnits handles GET /api/admin/learning-units
+func (h *AdminHandler) GetLearningUnits(c *gin.Context) {
+	courseID := c.Query("course_id")
+	if courseID == "" {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"error": "Course ID is required",
+		})
+		return
+	}
+
+	limitStr := c.DefaultQuery("limit", "50")
+	offsetStr := c.DefaultQuery("offset", "0")
+
+	limit, err := strconv.Atoi(limitStr)
+	if err != nil || limit <= 0 {
+		limit = 50
+	}
+
+	offset, err := strconv.Atoi(offsetStr)
+	if err != nil || offset < 0 {
+		offset = 0
+	}
+
+	learningUnits, err := h.learningUnitService.GetLearningUnitsByCourseID(courseID, limit, offset)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"error": "Failed to get learning units",
+			"details": err.Error(),
+		})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"learning_units": learningUnits,
+		"count":          len(learningUnits),
+		"limit":          limit,
+		"offset":         offset,
+	})
+}
+
+// GetLearningUnitByID handles GET /api/admin/learning-units/{unitId}
+func (h *AdminHandler) GetLearningUnitByID(c *gin.Context) {
+	unitID := c.Param("unitId")
+	if unitID == "" {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"error": "Learning unit ID is required",
+		})
+		return
+	}
+
+	learningUnit, err := h.learningUnitService.GetLearningUnitByID(unitID)
+	if err != nil {
+		if err.Error() == "learning unit not found" {
+			c.JSON(http.StatusNotFound, gin.H{
+				"error": "Learning unit not found",
+			})
+			return
+		}
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"error": "Failed to get learning unit",
+			"details": err.Error(),
+		})
+		return
+	}
+
+	c.JSON(http.StatusOK, learningUnit)
+}
+
+// UpdateLearningUnit handles PUT /api/admin/learning-units/{unitId}
+func (h *AdminHandler) UpdateLearningUnit(c *gin.Context) {
+	unitID := c.Param("unitId")
+	if unitID == "" {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"error": "Learning unit ID is required",
+		})
+		return
+	}
+
+	var req models.UpdateLearningUnitRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"error": "Invalid request body",
+			"details": err.Error(),
+		})
+		return
+	}
+
+	// Convert to map for updates
+	updates := make(map[string]interface{})
+	if req.Title != "" {
+		updates["title"] = req.Title
+	}
+	if req.Description != "" {
+		updates["description"] = req.Description
+	}
+	if req.UnitOrder > 0 {
+		updates["unit_order"] = req.UnitOrder
+	}
+
+	learningUnit, err := h.learningUnitService.UpdateLearningUnit(unitID, updates)
+	if err != nil {
+		if err.Error() == "learning unit not found" {
+			c.JSON(http.StatusNotFound, gin.H{
+				"error": "Learning unit not found",
+			})
+			return
+		}
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"error": "Failed to update learning unit",
+			"details": err.Error(),
+		})
+		return
+	}
+
+	c.JSON(http.StatusOK, learningUnit)
+}
+
+// DeleteLearningUnit handles DELETE /api/admin/learning-units/{unitId}
+func (h *AdminHandler) DeleteLearningUnit(c *gin.Context) {
+	unitID := c.Param("unitId")
+	if unitID == "" {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"error": "Learning unit ID is required",
+		})
+		return
+	}
+
+	err := h.learningUnitService.DeleteLearningUnit(unitID)
+	if err != nil {
+		if err.Error() == "learning unit not found" {
+			c.JSON(http.StatusNotFound, gin.H{
+				"error": "Learning unit not found",
+			})
+			return
+		}
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"error": "Failed to delete learning unit",
+			"details": err.Error(),
+		})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"message": "Learning unit deleted successfully",
+		"success": true,
+	})
+}
+
+// GetAssignments handles GET /api/admin/assignments
+func (h *AdminHandler) GetAssignments(c *gin.Context) {
+	learningUnitID := c.Query("learning_unit_id")
+	if learningUnitID == "" {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"error": "Learning unit ID is required",
+		})
+		return
+	}
+
+	limitStr := c.DefaultQuery("limit", "50")
+	offsetStr := c.DefaultQuery("offset", "0")
+
+	limit, err := strconv.Atoi(limitStr)
+	if err != nil || limit <= 0 {
+		limit = 50
+	}
+
+	offset, err := strconv.Atoi(offsetStr)
+	if err != nil || offset < 0 {
+		offset = 0
+	}
+
+	assignments, err := h.assignmentService.GetAssignmentsByLearningUnitID(learningUnitID, limit, offset)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"error": "Failed to get assignments",
+			"details": err.Error(),
+		})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"assignments": assignments,
+		"count":       len(assignments),
+		"limit":       limit,
+		"offset":      offset,
+	})
+}
+
+// GetAssignmentByID handles GET /api/admin/assignments/{assignmentId}
+func (h *AdminHandler) GetAssignmentByID(c *gin.Context) {
+	assignmentID := c.Param("assignmentId")
+	if assignmentID == "" {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"error": "Assignment ID is required",
+		})
+		return
+	}
+
+	assignment, err := h.assignmentService.GetAssignmentByID(assignmentID)
+	if err != nil {
+		if err.Error() == "assignment not found" {
+			c.JSON(http.StatusNotFound, gin.H{
+				"error": "Assignment not found",
+			})
+			return
+		}
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"error": "Failed to get assignment",
+			"details": err.Error(),
+		})
+		return
+	}
+
+	c.JSON(http.StatusOK, assignment)
+}
+
+// UpdateAssignment handles PUT /api/admin/assignments/{assignmentId}
+func (h *AdminHandler) UpdateAssignment(c *gin.Context) {
+	assignmentID := c.Param("assignmentId")
+	if assignmentID == "" {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"error": "Assignment ID is required",
+		})
+		return
+	}
+
+	var req models.UpdateAssignmentRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"error": "Invalid request body",
+			"details": err.Error(),
+		})
+		return
+	}
+
+	// Convert to map for updates
+	updates := make(map[string]interface{})
+	if req.Title != "" {
+		updates["title"] = req.Title
+	}
+	if req.Description != "" {
+		updates["description"] = req.Description
+	}
+	if req.DueDate != nil {
+		updates["due_date"] = req.DueDate
+	}
+
+	assignment, err := h.assignmentService.UpdateAssignment(assignmentID, updates)
+	if err != nil {
+		if err.Error() == "assignment not found" {
+			c.JSON(http.StatusNotFound, gin.H{
+				"error": "Assignment not found",
+			})
+			return
+		}
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"error": "Failed to update assignment",
+			"details": err.Error(),
+		})
+		return
+	}
+
+	c.JSON(http.StatusOK, assignment)
+}
+
+// DeleteAssignment handles DELETE /api/admin/assignments/{assignmentId}
+func (h *AdminHandler) DeleteAssignment(c *gin.Context) {
+	assignmentID := c.Param("assignmentId")
+	if assignmentID == "" {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"error": "Assignment ID is required",
+		})
+		return
+	}
+
+	err := h.assignmentService.DeleteAssignment(assignmentID)
+	if err != nil {
+		if err.Error() == "assignment not found" {
+			c.JSON(http.StatusNotFound, gin.H{
+				"error": "Assignment not found",
+			})
+			return
+		}
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"error": "Failed to delete assignment",
+			"details": err.Error(),
+		})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"message": "Assignment deleted successfully",
+		"success": true,
+	})
+}
+
+// GetQuizzes handles GET /api/admin/quizzes
+func (h *AdminHandler) GetQuizzes(c *gin.Context) {
+	learningUnitID := c.Query("learning_unit_id")
+	if learningUnitID == "" {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"error": "Learning unit ID is required",
+		})
+		return
+	}
+
+	limitStr := c.DefaultQuery("limit", "50")
+	offsetStr := c.DefaultQuery("offset", "0")
+
+	limit, err := strconv.Atoi(limitStr)
+	if err != nil || limit <= 0 {
+		limit = 50
+	}
+
+	offset, err := strconv.Atoi(offsetStr)
+	if err != nil || offset < 0 {
+		offset = 0
+	}
+
+	quizzes, err := h.quizService.GetQuizzesByLearningUnitID(learningUnitID, limit, offset)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"error": "Failed to get quizzes",
+			"details": err.Error(),
+		})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"quizzes": quizzes,
+		"count":   len(quizzes),
+		"limit":   limit,
+		"offset":  offset,
+	})
+}
+
+// GetQuizByID handles GET /api/admin/quizzes/{quizId}
+func (h *AdminHandler) GetQuizByID(c *gin.Context) {
+	quizID := c.Param("quizId")
+	if quizID == "" {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"error": "Quiz ID is required",
+		})
+		return
+	}
+
+	quiz, err := h.quizService.GetQuizByID(quizID)
+	if err != nil {
+		if err.Error() == "quiz not found" {
+			c.JSON(http.StatusNotFound, gin.H{
+				"error": "Quiz not found",
+			})
+			return
+		}
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"error": "Failed to get quiz",
+			"details": err.Error(),
+		})
+		return
+	}
+
+	c.JSON(http.StatusOK, quiz)
+}
+
+// UpdateQuiz handles PUT /api/admin/quizzes/{quizId}
+func (h *AdminHandler) UpdateQuiz(c *gin.Context) {
+	quizID := c.Param("quizId")
+	if quizID == "" {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"error": "Quiz ID is required",
+		})
+		return
+	}
+
+	var req models.UpdateQuizRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"error": "Invalid request body",
+			"details": err.Error(),
+		})
+		return
+	}
+
+	// Convert to map for updates
+	updates := make(map[string]interface{})
+	if req.Title != "" {
+		updates["title"] = req.Title
+	}
+	if req.QuizData.Questions != nil {
+		updates["quiz_data"] = req.QuizData
+	}
+
+	quiz, err := h.quizService.UpdateQuiz(quizID, updates)
+	if err != nil {
+		if err.Error() == "quiz not found" {
+			c.JSON(http.StatusNotFound, gin.H{
+				"error": "Quiz not found",
+			})
+			return
+		}
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"error": "Failed to update quiz",
+			"details": err.Error(),
+		})
+		return
+	}
+
+	c.JSON(http.StatusOK, quiz)
+}
+
+// DeleteQuiz handles DELETE /api/admin/quizzes/{quizId}
+func (h *AdminHandler) DeleteQuiz(c *gin.Context) {
+	quizID := c.Param("quizId")
+	if quizID == "" {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"error": "Quiz ID is required",
+		})
+		return
+	}
+
+	err := h.quizService.DeleteQuiz(quizID)
+	if err != nil {
+		if err.Error() == "quiz not found" {
+			c.JSON(http.StatusNotFound, gin.H{
+				"error": "Quiz not found",
+			})
+			return
+		}
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"error": "Failed to delete quiz",
+			"details": err.Error(),
+		})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"message": "Quiz deleted successfully",
+		"success": true,
+	})
+}
+
+// GetSubmissions handles GET /api/admin/submissions
+func (h *AdminHandler) GetSubmissions(c *gin.Context) {
+	assignmentID := c.Query("assignment_id")
+	studentID := c.Query("student_id")
+
+	limitStr := c.DefaultQuery("limit", "50")
+	offsetStr := c.DefaultQuery("offset", "0")
+
+	limit, err := strconv.Atoi(limitStr)
+	if err != nil || limit <= 0 {
+		limit = 50
+	}
+
+	offset, err := strconv.Atoi(offsetStr)
+	if err != nil || offset < 0 {
+		offset = 0
+	}
+
+	var assignmentIDPtr, studentIDPtr *string
+	if assignmentID != "" {
+		assignmentIDPtr = &assignmentID
+	}
+	if studentID != "" {
+		studentIDPtr = &studentID
+	}
+
+	submissions, err := h.submissionService.GetSubmissions(assignmentIDPtr, studentIDPtr, limit, offset)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"error": "Failed to get submissions",
+			"details": err.Error(),
+		})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"submissions": submissions,
+		"count":       len(submissions),
+		"limit":       limit,
+		"offset":      offset,
+	})
+}
+
+// GetSubmissionByID handles GET /api/admin/submissions/{submissionId}
+func (h *AdminHandler) GetSubmissionByID(c *gin.Context) {
+	submissionID := c.Param("submissionId")
+	if submissionID == "" {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"error": "Submission ID is required",
+		})
+		return
+	}
+
+	submission, err := h.submissionService.GetSubmissionByID(submissionID)
+	if err != nil {
+		if err.Error() == "submission not found" {
+			c.JSON(http.StatusNotFound, gin.H{
+				"error": "Submission not found",
+			})
+			return
+		}
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"error": "Failed to get submission",
+			"details": err.Error(),
+		})
+		return
+	}
+
+	c.JSON(http.StatusOK, submission)
+}
+
+// UpdateSubmission handles PUT /api/admin/submissions/{submissionId} (for grading)
+func (h *AdminHandler) UpdateSubmission(c *gin.Context) {
+	submissionID := c.Param("submissionId")
+	if submissionID == "" {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"error": "Submission ID is required",
+		})
+		return
+	}
+
+	var req models.UpdateSubmissionRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"error": "Invalid request body",
+			"details": err.Error(),
+		})
+		return
+	}
+
+	// Convert to map for updates
+	updates := make(map[string]interface{})
+	if req.Grade != "" {
+		updates["grade"] = req.Grade
+	}
+	if req.Feedback != "" {
+		updates["feedback"] = req.Feedback
+	}
+
+	submission, err := h.submissionService.UpdateSubmission(submissionID, updates)
+	if err != nil {
+		if err.Error() == "submission not found" {
+			c.JSON(http.StatusNotFound, gin.H{
+				"error": "Submission not found",
+			})
+			return
+		}
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"error": "Failed to update submission",
+			"details": err.Error(),
+		})
+		return
+	}
+
+	c.JSON(http.StatusOK, submission)
+}
+
+// DeleteSubmission handles DELETE /api/admin/submissions/{submissionId}
+func (h *AdminHandler) DeleteSubmission(c *gin.Context) {
+	submissionID := c.Param("submissionId")
+	if submissionID == "" {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"error": "Submission ID is required",
+		})
+		return
+	}
+
+	err := h.submissionService.DeleteSubmission(submissionID)
+	if err != nil {
+		if err.Error() == "submission not found" {
+			c.JSON(http.StatusNotFound, gin.H{
+				"error": "Submission not found",
+			})
+			return
+		}
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"error": "Failed to delete submission",
+			"details": err.Error(),
+		})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"message": "Submission deleted successfully",
 		"success": true,
 	})
 }

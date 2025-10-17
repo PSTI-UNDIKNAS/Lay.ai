@@ -20,14 +20,43 @@ func SetupRoutes(db *pgxpool.Pool) *gin.Engine {
 
 	// Initialize stores
 	userStore := store.NewUserStore(db)
+	courseStore := store.NewCourseStore(db)
+	learningUnitStore := store.NewLearningUnitStore(db)
+	assignmentStore := store.NewAssignmentStore(db)
+	quizStore := store.NewQuizStore(db)
+	submissionStore := store.NewSubmissionStore(db)
+	enrollmentStore := store.NewEnrollmentStore(db)
 
 	// Initialize services
 	authService := services.NewAuthService(userStore)
 	adminService := services.NewAdminService(userStore)
+	courseService := services.NewCourseService(courseStore)
+	learningUnitService := services.NewLearningUnitService(learningUnitStore)
+	assignmentService := services.NewAssignmentService(assignmentStore)
+	quizService := services.NewQuizService(quizStore)
+	submissionService := services.NewSubmissionService(submissionStore)
+	enrollmentService := services.NewEnrollmentService(enrollmentStore, courseStore)
 
 	// Initialize handlers
 	authHandler := handlers.NewAuthHandler(authService)
-	adminHandler := handlers.NewAdminHandler(adminService)
+	adminHandler := handlers.NewAdminHandler(
+		adminService,
+		courseService,
+		learningUnitService,
+		assignmentService,
+		quizService,
+		submissionService,
+	)
+	courseHandler := handlers.NewCourseHandler(courseService)
+	learningUnitHandler := handlers.NewLearningUnitHandler(learningUnitService, courseService)
+	progressHandler := handlers.NewProgressHandler(
+		courseService,
+		learningUnitService,
+		assignmentService,
+		quizService,
+		submissionService,
+	)
+	enrollmentHandler := handlers.NewEnrollmentHandler(enrollmentService)
 
 	// API v1 routes
 	v1 := router.Group("/api")
@@ -61,12 +90,109 @@ func SetupRoutes(db *pgxpool.Pool) *gin.Engine {
 			admin.POST("/users", adminHandler.CreateUser)
 			admin.PUT("/users/:userId", adminHandler.UpdateUser)
 			admin.DELETE("/users/:userId", adminHandler.DeleteUser)
+
+			// Content management endpoints
+			// Course management
+			admin.GET("/courses", adminHandler.GetCourses)
+			admin.GET("/courses/:courseId", adminHandler.GetCourseByID)
+			admin.PUT("/courses/:courseId", adminHandler.UpdateCourse)
+			admin.DELETE("/courses/:courseId", adminHandler.DeleteCourse)
+
+			// Learning unit management
+			admin.GET("/learning-units", adminHandler.GetLearningUnits)
+			admin.GET("/learning-units/:unitId", adminHandler.GetLearningUnitByID)
+			admin.PUT("/learning-units/:unitId", adminHandler.UpdateLearningUnit)
+			admin.DELETE("/learning-units/:unitId", adminHandler.DeleteLearningUnit)
+
+			// Assignment management
+			admin.GET("/assignments", adminHandler.GetAssignments)
+			admin.GET("/assignments/:assignmentId", adminHandler.GetAssignmentByID)
+			admin.PUT("/assignments/:assignmentId", adminHandler.UpdateAssignment)
+			admin.DELETE("/assignments/:assignmentId", adminHandler.DeleteAssignment)
+
+			// Quiz management
+			admin.GET("/quizzes", adminHandler.GetQuizzes)
+			admin.GET("/quizzes/:quizId", adminHandler.GetQuizByID)
+			admin.PUT("/quizzes/:quizId", adminHandler.UpdateQuiz)
+			admin.DELETE("/quizzes/:quizId", adminHandler.DeleteQuiz)
+
+			// Submission management
+			admin.GET("/submissions", adminHandler.GetSubmissions)
+			admin.GET("/submissions/:submissionId", adminHandler.GetSubmissionByID)
+			admin.PUT("/submissions/:submissionId", adminHandler.UpdateSubmission)
+			admin.DELETE("/submissions/:submissionId", adminHandler.DeleteSubmission)
 		}
 
-		// Future route groups can be added here:
-		// users := v1.Group("/users")
-		// courses := v1.Group("/courses")
-		// assignments := v1.Group("/assignments")
+		// Regular API endpoints for lecturers and students
+		
+		// Course routes
+		courses := v1.Group("/courses")
+		{
+			// Public endpoints
+			courses.GET("/", courseHandler.GetCourses)
+			courses.GET("/:courseId", courseHandler.GetCourseByID)
+			
+			// Lecturer only endpoints (require authentication and lecturer role)
+			courses.POST("/", middleware.AuthWithStatusMiddleware(authService), middleware.LecturerOnlyMiddleware(authService), courseHandler.CreateCourse)
+			courses.PUT("/:courseId", middleware.AuthWithStatusMiddleware(authService), middleware.LecturerOnlyMiddleware(authService), middleware.CourseOwnershipMiddleware(courseService), courseHandler.UpdateCourse)
+			courses.DELETE("/:courseId", middleware.AuthWithStatusMiddleware(authService), middleware.LecturerOnlyMiddleware(authService), middleware.CourseOwnershipMiddleware(courseService), courseHandler.DeleteCourse)
+			
+			// Enrollment endpoints
+			courses.POST("/:courseId/join", middleware.AuthWithStatusMiddleware(authService), middleware.StudentOnlyMiddleware(authService), enrollmentHandler.JoinCourse)
+			courses.POST("/:courseId/request-access", middleware.AuthWithStatusMiddleware(authService), middleware.StudentOnlyMiddleware(authService), enrollmentHandler.RequestAccess)
+			courses.GET("/:courseId/access-requests", middleware.AuthWithStatusMiddleware(authService), middleware.LecturerOnlyMiddleware(authService), middleware.CourseOwnershipMiddleware(courseService), enrollmentHandler.GetAccessRequests)
+			courses.DELETE("/:courseId/unenroll", middleware.AuthWithStatusMiddleware(authService), middleware.StudentOnlyMiddleware(authService), enrollmentHandler.UnenrollFromCourse)
+		}
+
+		// Learning unit routes
+		learningUnits := v1.Group("/learning-units")
+		learningUnits.Use(middleware.AuthWithStatusMiddleware(authService))
+		{
+			// Lecturer only endpoints (course owner)
+			learningUnits.POST("/courses/:courseId/units", middleware.LecturerOnlyMiddleware(authService), middleware.CourseOwnershipMiddleware(courseService), learningUnitHandler.CreateLearningUnit)
+			learningUnits.PUT("/:unitId", middleware.LecturerOnlyMiddleware(authService), learningUnitHandler.UpdateLearningUnit)
+			learningUnits.DELETE("/:unitId", middleware.LecturerOnlyMiddleware(authService), learningUnitHandler.DeleteLearningUnit)
+			
+			// Enrolled students endpoints
+			learningUnits.GET("/courses/:courseId/units", middleware.StudentOnlyMiddleware(authService), middleware.EnrollmentRequiredMiddleware(enrollmentStore), learningUnitHandler.GetLearningUnits)
+			learningUnits.GET("/:unitId", middleware.StudentOnlyMiddleware(authService), learningUnitHandler.GetLearningUnitByID)
+			
+			// TODO: Add material, assignment, quiz, and flashcard endpoints
+			// learningUnits.POST("/:unitId/materials", materialHandler.CreateMaterial)
+			// learningUnits.POST("/:unitId/assignments", assignmentHandler.CreateAssignment)
+			// learningUnits.POST("/:unitId/quizzes", quizHandler.CreateQuiz)
+			// learningUnits.GET("/:unitId/quizzes/:quizId", quizHandler.GetQuiz)
+			// learningUnits.POST("/:unitId/flashcard-sets", flashcardHandler.CreateFlashcardSet)
+		}
+
+		// Progress routes
+		progress := v1.Group("/progress")
+		progress.Use(middleware.AuthWithStatusMiddleware(authService))
+		progress.Use(middleware.StudentOnlyMiddleware(authService))
+		{
+			// Enrolled students only endpoints
+			progress.GET("/courses/:courseId/me", middleware.EnrollmentRequiredMiddleware(enrollmentStore), progressHandler.GetStudentProgress)
+			progress.POST("/units/:unitId/complete", progressHandler.CompleteUnit)
+			progress.POST("/assignments/:assignmentId/submit", progressHandler.SubmitAssignment)
+			progress.POST("/quizzes/:quizId/submit", progressHandler.SubmitQuiz)
+		}
+
+		// Enrollment routes
+		enrollments := v1.Group("/enrollments")
+		enrollments.Use(middleware.AuthWithStatusMiddleware(authService))
+		{
+			// Student endpoints
+			enrollments.GET("/me", middleware.StudentOnlyMiddleware(authService), enrollmentHandler.GetMyEnrollments)
+		}
+
+		// Access request routes
+		accessRequests := v1.Group("/access-requests")
+		accessRequests.Use(middleware.AuthWithStatusMiddleware(authService))
+		accessRequests.Use(middleware.LecturerOnlyMiddleware(authService))
+		{
+			// Lecturer endpoints for managing access requests
+			accessRequests.POST("/:requestId/approve", enrollmentHandler.ApproveAccessRequest)
+		}
 	}
 
 	return router

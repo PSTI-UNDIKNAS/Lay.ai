@@ -52,6 +52,217 @@ func AuthMiddleware() gin.HandlerFunc {
 	}
 }
 
+// EnrollmentRequiredMiddleware verifies that the student is enrolled in the course
+func EnrollmentRequiredMiddleware(enrollmentService interface {
+	GetEnrollmentByStudentAndCourse(studentID, courseID string) (*models.Enrollment, error)
+}) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		// This middleware should be used after AuthWithStatusMiddleware and StudentOnlyMiddleware
+		userID, exists := c.Get("user_id")
+		if !exists {
+			c.JSON(http.StatusUnauthorized, gin.H{
+				"error": "Authentication required",
+			})
+			c.Abort()
+			return
+		}
+
+		userIDStr, ok := userID.(string)
+		if !ok {
+			c.JSON(http.StatusInternalServerError, gin.H{
+				"error": "Invalid user ID format",
+			})
+			c.Abort()
+			return
+		}
+
+		// Get course ID from URL parameter
+		courseID := c.Param("courseId")
+		if courseID == "" {
+			c.JSON(http.StatusBadRequest, gin.H{
+				"error": "Course ID is required",
+			})
+			c.Abort()
+			return
+		}
+
+		// Check if student is enrolled in the course
+		enrollment, err := enrollmentService.GetEnrollmentByStudentAndCourse(userIDStr, courseID)
+		if err != nil {
+			c.JSON(http.StatusForbidden, gin.H{
+				"error": "You must be enrolled in this course to access this resource",
+			})
+			c.Abort()
+			return
+		}
+
+		// Check if enrollment is active
+		if enrollment.Status != models.EnrollmentStatusEnrolled {
+			c.JSON(http.StatusForbidden, gin.H{
+				"error": "Your enrollment in this course is not active",
+			})
+			c.Abort()
+			return
+		}
+
+		// Store enrollment info in context for use in handlers
+		c.Set("enrollment", enrollment)
+
+		// Continue to next handler
+		c.Next()
+	}
+}
+
+// CourseOwnershipMiddleware verifies that the authenticated lecturer owns the course
+func CourseOwnershipMiddleware(courseService interface {
+	GetCourseByID(courseID string) (*models.Course, error)
+}) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		// This middleware should be used after AuthWithStatusMiddleware and LecturerOnlyMiddleware
+		userID, exists := c.Get("user_id")
+		if !exists {
+			c.JSON(http.StatusUnauthorized, gin.H{
+				"error": "Authentication required",
+			})
+			c.Abort()
+			return
+		}
+
+		userIDStr, ok := userID.(string)
+		if !ok {
+			c.JSON(http.StatusInternalServerError, gin.H{
+				"error": "Invalid user ID format",
+			})
+			c.Abort()
+			return
+		}
+
+		// Get course ID from URL parameter
+		courseID := c.Param("courseId")
+		if courseID == "" {
+			c.JSON(http.StatusBadRequest, gin.H{
+				"error": "Course ID is required",
+			})
+			c.Abort()
+			return
+		}
+
+		// Fetch course to verify ownership
+		course, err := courseService.GetCourseByID(courseID)
+		if err != nil {
+			c.JSON(http.StatusNotFound, gin.H{
+				"error": "Course not found",
+			})
+			c.Abort()
+			return
+		}
+
+		// Check if the authenticated user is the course creator
+		if course.CreatorID.String() != userIDStr {
+			c.JSON(http.StatusForbidden, gin.H{
+				"error": "You can only modify courses you created",
+			})
+			c.Abort()
+			return
+		}
+
+		// Continue to next handler
+		c.Next()
+	}
+}
+
+// LecturerOnlyMiddleware ensures only lecturer users can access the endpoint
+func LecturerOnlyMiddleware(authService *services.AuthService) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		// This middleware should be used after AuthWithStatusMiddleware
+		userID, exists := c.Get("user_id")
+		if !exists {
+			c.JSON(http.StatusUnauthorized, gin.H{
+				"error": "Authentication required",
+			})
+			c.Abort()
+			return
+		}
+
+		userIDStr, ok := userID.(string)
+		if !ok {
+			c.JSON(http.StatusInternalServerError, gin.H{
+				"error": "Invalid user ID format",
+			})
+			c.Abort()
+			return
+		}
+
+		// Fetch user from database to check role
+		user, err := authService.GetUserByID(userIDStr)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{
+				"error": "Failed to verify user permissions",
+			})
+			c.Abort()
+			return
+		}
+
+		// Check if user has lecturer role
+		if user.Role != models.RoleLecturer {
+			c.JSON(http.StatusForbidden, gin.H{
+				"error": "Lecturer access required",
+			})
+			c.Abort()
+			return
+		}
+
+		// Continue to next handler
+		c.Next()
+	}
+}
+
+// StudentOnlyMiddleware ensures only student users can access the endpoint
+func StudentOnlyMiddleware(authService *services.AuthService) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		// This middleware should be used after AuthWithStatusMiddleware
+		userID, exists := c.Get("user_id")
+		if !exists {
+			c.JSON(http.StatusUnauthorized, gin.H{
+				"error": "Authentication required",
+			})
+			c.Abort()
+			return
+		}
+
+		userIDStr, ok := userID.(string)
+		if !ok {
+			c.JSON(http.StatusInternalServerError, gin.H{
+				"error": "Invalid user ID format",
+			})
+			c.Abort()
+			return
+		}
+
+		// Fetch user from database to check role
+		user, err := authService.GetUserByID(userIDStr)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{
+				"error": "Failed to verify user permissions",
+			})
+			c.Abort()
+			return
+		}
+
+		// Check if user has student role
+		if user.Role != models.RoleStudent {
+			c.JSON(http.StatusForbidden, gin.H{
+				"error": "Student access required",
+			})
+			c.Abort()
+			return
+		}
+
+		// Continue to next handler
+		c.Next()
+	}
+}
+
 // OptionalAuthMiddleware validates JWT tokens but doesn't require them
 // Useful for endpoints that work differently for authenticated vs anonymous users
 func OptionalAuthMiddleware() gin.HandlerFunc {
