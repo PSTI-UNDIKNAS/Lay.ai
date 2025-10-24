@@ -133,6 +133,7 @@ func SetupRoutes(db *pgxpool.Pool) *gin.Engine {
 			courses.GET("/:courseId", courseHandler.GetCourseByID)
 			
 			// Lecturer only endpoints (require authentication and lecturer role)
+			courses.GET("/me", middleware.AuthWithStatusMiddleware(authService), middleware.LecturerOnlyMiddleware(authService), courseHandler.GetMyCourses)
 			courses.POST("/", middleware.AuthWithStatusMiddleware(authService), middleware.LecturerOnlyMiddleware(authService), courseHandler.CreateCourse)
 			courses.PUT("/:courseId", middleware.AuthWithStatusMiddleware(authService), middleware.LecturerOnlyMiddleware(authService), middleware.CourseOwnershipMiddleware(courseService), courseHandler.UpdateCourse)
 			courses.DELETE("/:courseId", middleware.AuthWithStatusMiddleware(authService), middleware.LecturerOnlyMiddleware(authService), middleware.CourseOwnershipMiddleware(courseService), courseHandler.DeleteCourse)

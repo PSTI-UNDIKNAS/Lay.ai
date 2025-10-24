@@ -26,13 +26,13 @@ migrate-new:
 	@echo "Creating new migration files for ${name}..."
 	docker run --rm -v "$(CURDIR)/migrations:/migrations" migrate/migrate create -ext sql -dir /migrations -seq ${name}
 
-## seed-admin: creates an admin user interactively using Docker
+## seed-admin: creates an admin user interactively
 seed-admin:
 	@echo "🔐 Starting Admin User Creation Tool..."
-	@echo "This will run the seed-admin tool in a Docker container."
+	@echo "Connecting to Docker database on localhost:${DB_PORT}..."
 	@echo "Make sure your database is running (docker-compose up -d database)"
 	@echo ""
-	cd ../.. && docker-compose run --rm seed-admin
+	DATABASE_URL="postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@localhost:${DB_PORT}/${POSTGRES_DB}?sslmode=disable" go run ./cmd/seed-admin/main.go
 
 ## help: shows available commands
 help:

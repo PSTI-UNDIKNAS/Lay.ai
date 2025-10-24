@@ -41,6 +41,34 @@ func (h *CourseHandler) GetCourses(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"courses": courses})
 }
 
+// GetMyCourses handles GET /api/courses/me - Lecturer only
+func (h *CourseHandler) GetMyCourses(c *gin.Context) {
+	// Get user ID from context (set by auth middleware)
+	userID, exists := c.Get("user_id")
+	if !exists {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "User not authenticated"})
+		return
+	}
+
+	userIDStr, ok := userID.(string)
+	if !ok {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Invalid user ID format"})
+		return
+	}
+
+	// Parse query parameters for pagination
+	limit, _ := strconv.Atoi(c.DefaultQuery("limit", "10"))
+	offset, _ := strconv.Atoi(c.DefaultQuery("offset", "0"))
+
+	courses, err := h.courseService.GetCourses(&userIDStr, limit, offset)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to fetch your courses"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"courses": courses})
+}
+
 // CreateCourse handles POST /api/courses - Lecturer only
 func (h *CourseHandler) CreateCourse(c *gin.Context) {
 	// Get user from context (set by auth middleware)
@@ -52,9 +80,9 @@ func (h *CourseHandler) CreateCourse(c *gin.Context) {
 
 	// Parse request body
 	var req struct {
-		Title       string             `json:"title" binding:"required"`
-		Description string             `json:"description"`
-		AccessType  models.AccessType  `json:"access_type"`
+		Title       string            `json:"title" binding:"required"`
+		Description string            `json:"description"`
+		AccessType  models.AccessType `json:"access_type"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid request body"})
@@ -106,9 +134,9 @@ func (h *CourseHandler) UpdateCourse(c *gin.Context) {
 
 	// Parse request body
 	var req struct {
-		Title       string             `json:"title"`
-		Description string             `json:"description"`
-		AccessType  models.AccessType  `json:"access_type"`
+		Title       string            `json:"title"`
+		Description string            `json:"description"`
+		AccessType  models.AccessType `json:"access_type"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid request body"})

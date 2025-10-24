@@ -2,7 +2,7 @@
   "openapi": "3.0.3",
   "info": {
     "title": "Lay.AI Backend API",
-    "description": "Comprehensive API documentation for the Lay.AI learning management system with AI-powered features",
+    "description": "API documentation aligned with testscenarios.md for the Lay.AI LMS",
     "version": "1.0.0",
     "contact": {
       "name": "Lay.AI Team",
@@ -11,12 +11,8 @@
   },
   "servers": [
     {
-      "url": "http://localhost:8080",
+      "url": "http://localhost:8080/api",
       "description": "Development server"
-    },
-    {
-      "url": "https://api.layai.ai",
-      "description": "Production server"
     }
   ],
   "security": [
@@ -47,17 +43,24 @@
             "type": "string",
             "format": "email"
           },
-          "nim": {
-            "type": "string",
-            "nullable": true
+          "unique_identifier": {
+            "type": "string"
           },
           "role": {
             "type": "string",
-            "enum": ["student", "lecturer", "admin"]
+            "enum": [
+              "student",
+              "lecturer",
+              "admin"
+            ]
           },
           "status": {
             "type": "string",
-            "enum": ["active", "inactive", "pending"]
+            "enum": [
+              "active",
+              "pending_approval",
+              "inactive"
+            ]
           },
           "created_at": {
             "type": "string",
@@ -76,15 +79,56 @@
             "type": "string",
             "format": "uuid"
           },
+          "creator_id": {
+            "type": "string",
+            "format": "uuid"
+          },
           "title": {
             "type": "string"
           },
           "description": {
             "type": "string"
           },
-          "lecturer_id": {
+          "access_type": {
+            "type": "string",
+            "enum": [
+              "public",
+              "password",
+              "by_request"
+            ]
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "Enrollment": {
+        "type": "object",
+        "properties": {
+          "id": {
             "type": "string",
             "format": "uuid"
+          },
+          "student_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "course_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "enrolled",
+              "pending_approval",
+              "denied"
+            ]
           },
           "created_at": {
             "type": "string",
@@ -113,65 +157,28 @@
           "description": {
             "type": "string"
           },
-          "order": {
+          "unit_order": {
             "type": "integer"
           },
           "created_at": {
             "type": "string",
             "format": "date-time"
-          }
-        }
-      },
-      "Quiz": {
-        "type": "object",
-        "properties": {
-          "id": {
+          },
+          "updated_at": {
             "type": "string",
-            "format": "uuid"
-          },
-          "unit_id": {
-            "type": "string",
-            "format": "uuid"
-          },
-          "title": {
-            "type": "string"
-          },
-          "questions": {
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/Question"
-            }
-          }
-        }
-      },
-      "Question": {
-        "type": "object",
-        "properties": {
-          "id": {
-            "type": "string",
-            "format": "uuid"
-          },
-          "text": {
-            "type": "string"
-          },
-          "type": {
-            "type": "string",
-            "enum": ["multiple_choice", "true_false", "short_answer"]
-          },
-          "options": {
-            "type": "array",
-            "items": {
-              "type": "string"
-            }
-          },
-          "correct_answer": {
-            "type": "string"
+            "format": "date-time"
           }
         }
       },
       "RegisterRequest": {
         "type": "object",
-        "required": ["name", "email", "password", "role"],
+        "required": [
+          "name",
+          "email",
+          "unique_identifier",
+          "password",
+          "role"
+        ],
         "properties": {
           "name": {
             "type": "string"
@@ -180,23 +187,28 @@
             "type": "string",
             "format": "email"
           },
+          "unique_identifier": {
+            "type": "string"
+          },
           "password": {
             "type": "string",
-            "minLength": 8
-          },
-          "nim": {
-            "type": "string",
-            "nullable": true
+            "minLength": 6
           },
           "role": {
             "type": "string",
-            "enum": ["student", "lecturer"]
+            "enum": [
+              "student",
+              "lecturer"
+            ]
           }
         }
       },
       "LoginRequest": {
         "type": "object",
-        "required": ["email", "password"],
+        "required": [
+          "email",
+          "password"
+        ],
         "properties": {
           "email": {
             "type": "string",
@@ -218,13 +230,159 @@
           }
         }
       },
+      "CreateCourseRequest": {
+        "type": "object",
+        "required": [
+          "title",
+          "access_type"
+        ],
+        "properties": {
+          "title": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string"
+          },
+          "access_type": {
+            "type": "string",
+            "enum": [
+              "public",
+              "password",
+              "by_request"
+            ]
+          },
+          "password": {
+            "type": "string",
+            "description": "Required when access_type=password"
+          }
+        }
+      },
+      "UpdateCourseRequest": {
+        "type": "object",
+        "properties": {
+          "title": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string"
+          },
+          "access_type": {
+            "type": "string",
+            "enum": [
+              "public",
+              "password",
+              "by_request"
+            ]
+          },
+          "password": {
+            "type": "string"
+          }
+        }
+      },
+      "CreateLearningUnitRequest": {
+        "type": "object",
+        "required": [
+          "title",
+          "unit_order"
+        ],
+        "properties": {
+          "title": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string"
+          },
+          "unit_order": {
+            "type": "integer",
+            "minimum": 1
+          }
+        }
+      },
+      "UpdateLearningUnitRequest": {
+        "type": "object",
+        "properties": {
+          "title": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string"
+          },
+          "unit_order": {
+            "type": "integer",
+            "minimum": 1
+          }
+        }
+      },
+      "ApproveAccessRequest": {
+        "type": "object",
+        "required": [
+          "approved"
+        ],
+        "properties": {
+          "approved": {
+            "type": "boolean"
+          }
+        }
+      },
+      "ProgressUpdateRequest": {
+        "type": "object",
+        "required": [
+          "learning_unit_id",
+          "completed"
+        ],
+        "properties": {
+          "learning_unit_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "completed": {
+            "type": "boolean"
+          }
+        }
+      },
+      "GetCoursesResponse": {
+        "type": "object",
+        "properties": {
+          "courses": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Course"
+            }
+          },
+          "total": {
+            "type": "integer"
+          }
+        }
+      },
+      "GetLearningUnitsResponse": {
+        "type": "object",
+        "properties": {
+          "units": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/LearningUnit"
+            }
+          },
+          "total": {
+            "type": "integer"
+          }
+        }
+      },
+      "GetEnrollmentsResponse": {
+        "type": "object",
+        "properties": {
+          "enrollments": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Enrollment"
+            }
+          }
+        }
+      },
       "ErrorResponse": {
         "type": "object",
         "properties": {
           "error": {
-            "type": "string"
-          },
-          "message": {
             "type": "string"
           }
         }
@@ -240,11 +398,13 @@
     }
   },
   "paths": {
-    "/api/auth/register": {
+    "/auth/register": {
       "post": {
-        "tags": ["Authentication"],
+        "tags": [
+          "Student",
+          "Lecturer"
+        ],
         "summary": "Register a new user",
-        "description": "Register a new student or lecturer account",
         "security": [],
         "requestBody": {
           "required": true,
@@ -262,7 +422,15 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/AuthResponse"
+                  "type": "object",
+                  "properties": {
+                    "message": {
+                      "type": "string"
+                    },
+                    "user": {
+                      "$ref": "#/components/schemas/User"
+                    }
+                  }
                 }
               }
             }
@@ -290,11 +458,14 @@
         }
       }
     },
-    "/api/auth/login": {
+    "/auth/login": {
       "post": {
-        "tags": ["Authentication"],
+        "tags": [
+          "Student",
+          "Lecturer",
+          "Admin"
+        ],
         "summary": "Login user",
-        "description": "Authenticate user with email and password",
         "security": [],
         "requestBody": {
           "required": true,
@@ -330,72 +501,14 @@
         }
       }
     },
-    "/api/auth/login/google": {
+    "/auth/me": {
       "get": {
-        "tags": ["Authentication"],
-        "summary": "Google OAuth login",
-        "description": "Initiate Google OAuth login flow",
-        "security": [],
-        "responses": {
-          "302": {
-            "description": "Redirect to Google OAuth"
-          }
-        }
-      }
-    },
-    "/api/auth/login/google/callback": {
-      "get": {
-        "tags": ["Authentication"],
-        "summary": "Google OAuth callback",
-        "description": "Handle Google OAuth callback",
-        "security": [],
-        "parameters": [
-          {
-            "name": "code",
-            "in": "query",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "name": "state",
-            "in": "query",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          }
+        "tags": [
+          "Student",
+          "Lecturer",
+          "Admin"
         ],
-        "responses": {
-          "200": {
-            "description": "OAuth login successful",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/AuthResponse"
-                }
-              }
-            }
-          },
-          "400": {
-            "description": "OAuth error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/api/auth/me": {
-      "get": {
-        "tags": ["Authentication"],
         "summary": "Get current user",
-        "description": "Get current authenticated user information",
         "responses": {
           "200": {
             "description": "User information",
@@ -420,11 +533,14 @@
         }
       }
     },
-    "/api/auth/logout": {
+    "/auth/logout": {
       "post": {
-        "tags": ["Authentication"],
+        "tags": [
+          "Student",
+          "Lecturer",
+          "Admin"
+        ],
         "summary": "Logout user",
-        "description": "Logout current user and invalidate token",
         "responses": {
           "200": {
             "description": "Logout successful",
@@ -439,18 +555,23 @@
         }
       }
     },
-    "/api/admin/lecturers": {
+    "/admin/lecturers": {
       "get": {
-        "tags": ["Admin"],
+        "tags": [
+          "Admin"
+        ],
         "summary": "Get lecturers",
-        "description": "Get list of lecturers with optional status filter",
         "parameters": [
           {
             "name": "status",
             "in": "query",
             "schema": {
               "type": "string",
-              "enum": ["pending", "active", "inactive"]
+              "enum": [
+                "pending_approval",
+                "active",
+                "inactive"
+              ]
             }
           }
         ],
@@ -460,9 +581,17 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "type": "array",
-                  "items": {
-                    "$ref": "#/components/schemas/User"
+                  "type": "object",
+                  "properties": {
+                    "lecturers": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/User"
+                      }
+                    },
+                    "count": {
+                      "type": "integer"
+                    }
                   }
                 }
               }
@@ -481,11 +610,12 @@
         }
       }
     },
-    "/api/admin/lecturers/{lecturerId}/approve": {
+    "/admin/lecturers/{lecturerId}/approve": {
       "post": {
-        "tags": ["Admin"],
+        "tags": [
+          "Admin"
+        ],
         "summary": "Approve lecturer",
-        "description": "Approve a pending lecturer account",
         "parameters": [
           {
             "name": "lecturerId",
@@ -503,17 +633,15 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/SuccessResponse"
-                }
-              }
-            }
-          },
-          "403": {
-            "description": "Forbidden - Admin access required",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
+                  "type": "object",
+                  "properties": {
+                    "message": {
+                      "type": "string"
+                    },
+                    "success": {
+                      "type": "boolean"
+                    }
+                  }
                 }
               }
             }
@@ -531,20 +659,69 @@
         }
       }
     },
-    "/api/courses": {
+    "/admin/users": {
       "get": {
-        "tags": ["Courses"],
-        "summary": "Get courses",
-        "description": "Get list of available courses",
+        "tags": [
+          "Admin"
+        ],
+        "summary": "Get users",
+        "parameters": [
+          {
+            "name": "role",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "student",
+                "lecturer",
+                "admin"
+              ]
+            }
+          },
+          {
+            "name": "status",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "active",
+                "pending_approval",
+                "inactive"
+              ]
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
         "responses": {
           "200": {
-            "description": "List of courses",
+            "description": "List of users",
             "content": {
               "application/json": {
                 "schema": {
-                  "type": "array",
-                  "items": {
-                    "$ref": "#/components/schemas/Course"
+                  "type": "object",
+                  "properties": {
+                    "users": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/User"
+                      }
+                    },
+                    "count": {
+                      "type": "integer"
+                    }
                   }
                 }
               }
@@ -553,22 +730,52 @@
         }
       },
       "post": {
-        "tags": ["Courses"],
-        "summary": "Create course",
-        "description": "Create a new course (Lecturer only)",
+        "tags": [
+          "Admin"
+        ],
+        "summary": "Create user",
         "requestBody": {
           "required": true,
           "content": {
             "application/json": {
               "schema": {
                 "type": "object",
-                "required": ["title", "description"],
+                "required": [
+                  "name",
+                  "email",
+                  "unique_identifier",
+                  "password",
+                  "role"
+                ],
                 "properties": {
-                  "title": {
+                  "name": {
                     "type": "string"
                   },
-                  "description": {
+                  "email": {
+                    "type": "string",
+                    "format": "email"
+                  },
+                  "unique_identifier": {
                     "type": "string"
+                  },
+                  "password": {
+                    "type": "string"
+                  },
+                  "role": {
+                    "type": "string",
+                    "enum": [
+                      "student",
+                      "lecturer",
+                      "admin"
+                    ]
+                  },
+                  "status": {
+                    "type": "string",
+                    "enum": [
+                      "active",
+                      "pending_approval",
+                      "inactive"
+                    ]
                   }
                 }
               }
@@ -577,21 +784,19 @@
         },
         "responses": {
           "201": {
-            "description": "Course created successfully",
+            "description": "User created successfully",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/Course"
-                }
-              }
-            }
-          },
-          "403": {
-            "description": "Forbidden - Lecturer access required",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
+                  "type": "object",
+                  "properties": {
+                    "message": {
+                      "type": "string"
+                    },
+                    "user": {
+                      "$ref": "#/components/schemas/User"
+                    }
+                  }
                 }
               }
             }
@@ -599,11 +804,196 @@
         }
       }
     },
-    "/api/courses/{courseId}/join": {
-      "post": {
-        "tags": ["Courses"],
-        "summary": "Join course",
-        "description": "Join a course directly (Student only)",
+    "/admin/users/{userId}": {
+      "get": {
+        "tags": [
+          "Admin"
+        ],
+        "summary": "Get user by ID",
+        "parameters": [
+          {
+            "name": "userId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "User details",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/User"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "User not found"
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "Admin"
+        ],
+        "summary": "Update user",
+        "parameters": [
+          {
+            "name": "userId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "name": {
+                    "type": "string"
+                  },
+                  "email": {
+                    "type": "string",
+                    "format": "email"
+                  },
+                  "unique_identifier": {
+                    "type": "string"
+                  },
+                  "role": {
+                    "type": "string",
+                    "enum": [
+                      "student",
+                      "lecturer",
+                      "admin"
+                    ]
+                  },
+                  "status": {
+                    "type": "string",
+                    "enum": [
+                      "active",
+                      "pending_approval",
+                      "inactive"
+                    ]
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "User updated successfully"
+          },
+          "404": {
+            "description": "User not found"
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "Admin"
+        ],
+        "summary": "Delete user",
+        "parameters": [
+          {
+            "name": "userId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "User deleted successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SuccessResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "User not found"
+          }
+        }
+      }
+    },
+    "/admin/courses": {
+      "get": {
+        "tags": [
+          "Admin"
+        ],
+        "summary": "View all courses",
+        "responses": {
+          "200": {
+            "description": "Courses list",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GetCoursesResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/admin/courses/{courseId}": {
+      "put": {
+        "tags": [
+          "Admin"
+        ],
+        "summary": "Update any course",
+        "parameters": [
+          {
+            "name": "courseId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateCourseRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Course updated"
+          },
+          "404": {
+            "description": "Course not found"
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "Admin"
+        ],
+        "summary": "Delete any course",
         "parameters": [
           {
             "name": "courseId",
@@ -617,7 +1007,258 @@
         ],
         "responses": {
           "200": {
-            "description": "Successfully joined course",
+            "description": "Course deleted",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SuccessResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Course not found"
+          }
+        }
+      }
+    },
+    "/admin/learning-units": {
+      "get": {
+        "tags": [
+          "Admin"
+        ],
+        "summary": "View all learning units",
+        "responses": {
+          "200": {
+            "description": "Learning units list"
+          }
+        }
+      }
+    },
+    "/admin/learning-units/{unitId}": {
+      "put": {
+        "tags": [
+          "Admin"
+        ],
+        "summary": "Update any learning unit",
+        "parameters": [
+          {
+            "name": "unitId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateLearningUnitRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Learning unit updated"
+          },
+          "404": {
+            "description": "Learning unit not found"
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "Admin"
+        ],
+        "summary": "Delete any learning unit",
+        "parameters": [
+          {
+            "name": "unitId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Learning unit deleted",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SuccessResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Learning unit not found"
+          }
+        }
+      }
+    },
+    "/courses": {
+      "get": {
+        "tags": [
+          "Student"
+        ],
+        "summary": "Get courses",
+        "responses": {
+          "200": {
+            "description": "List of courses",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GetCoursesResponse"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "Lecturer"
+        ],
+        "summary": "Create course",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateCourseRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Course created",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "course": {
+                      "$ref": "#/components/schemas/Course"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Lecturer access required"
+          }
+        }
+      }
+    },
+    "/courses/{courseId}": {
+      "get": {
+        "tags": [
+          "Student"
+        ],
+        "summary": "Get course by ID",
+        "parameters": [
+          {
+            "name": "courseId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Course details",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Course"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Course not found"
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "Lecturer"
+        ],
+        "summary": "Update own course",
+        "parameters": [
+          {
+            "name": "courseId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateCourseRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Course updated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "course": {
+                      "$ref": "#/components/schemas/Course"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Access denied - not course owner"
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "Lecturer"
+        ],
+        "summary": "Delete own course",
+        "parameters": [
+          {
+            "name": "courseId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Course deleted",
             "content": {
               "application/json": {
                 "schema": {
@@ -627,33 +1268,77 @@
             }
           },
           "403": {
-            "description": "Forbidden - Student access required",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "Course not found",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            }
+            "description": "Access denied - not course owner"
           }
         }
       }
     },
-    "/api/courses/{courseId}/request-access": {
+    "/courses/{courseId}/join": {
       "post": {
-        "tags": ["Courses"],
-        "summary": "Request course access",
-        "description": "Request access to a course (Student only)",
+        "tags": [
+          "Student"
+        ],
+        "summary": "Join course",
+        "parameters": [
+          {
+            "name": "courseId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": false,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "password": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successfully joined course",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "message": {
+                      "type": "string"
+                    },
+                    "enrollment": {
+                      "$ref": "#/components/schemas/Enrollment"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad request"
+          },
+          "404": {
+            "description": "Course not found"
+          }
+        }
+      }
+    },
+    "/courses/{courseId}/request-access": {
+      "post": {
+        "tags": [
+          "Student"
+        ],
+        "summary": "Request access to course",
         "parameters": [
           {
             "name": "courseId",
@@ -671,17 +1356,15 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/SuccessResponse"
-                }
-              }
-            }
-          },
-          "403": {
-            "description": "Forbidden - Student access required",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
+                  "type": "object",
+                  "properties": {
+                    "message": {
+                      "type": "string"
+                    },
+                    "enrollment": {
+                      "$ref": "#/components/schemas/Enrollment"
+                    }
+                  }
                 }
               }
             }
@@ -689,11 +1372,12 @@
         }
       }
     },
-    "/api/courses/{courseId}/access-requests": {
+    "/courses/{courseId}/access-requests": {
       "get": {
-        "tags": ["Courses"],
-        "summary": "Get access requests",
-        "description": "Get pending access requests for a course (Lecturer only)",
+        "tags": [
+          "Lecturer"
+        ],
+        "summary": "Get pending access requests",
         "parameters": [
           {
             "name": "courseId",
@@ -707,37 +1391,19 @@
         ],
         "responses": {
           "200": {
-            "description": "List of access requests",
+            "description": "Access requests",
             "content": {
               "application/json": {
                 "schema": {
-                  "type": "array",
-                  "items": {
-                    "type": "object",
-                    "properties": {
-                      "id": {
-                        "type": "string",
-                        "format": "uuid"
-                      },
-                      "student": {
-                        "$ref": "#/components/schemas/User"
-                      },
-                      "requested_at": {
-                        "type": "string",
-                        "format": "date-time"
+                  "type": "object",
+                  "properties": {
+                    "requests": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/Enrollment"
                       }
                     }
                   }
-                }
-              }
-            }
-          },
-          "403": {
-            "description": "Forbidden - Lecturer access required",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
                 }
               }
             }
@@ -745,11 +1411,12 @@
         }
       }
     },
-    "/api/courses/access-requests/{requestId}/approve": {
+    "/access-requests/{requestId}/approve": {
       "post": {
-        "tags": ["Courses"],
-        "summary": "Approve access request",
-        "description": "Approve a student's access request (Lecturer only)",
+        "tags": [
+          "Lecturer"
+        ],
+        "summary": "Approve or deny access request",
         "parameters": [
           {
             "name": "requestId",
@@ -761,9 +1428,19 @@
             }
           }
         ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ApproveAccessRequest"
+              }
+            }
+          }
+        },
         "responses": {
           "200": {
-            "description": "Access request approved",
+            "description": "Access request decision",
             "content": {
               "application/json": {
                 "schema": {
@@ -771,35 +1448,48 @@
                 }
               }
             }
-          },
-          "403": {
-            "description": "Forbidden - Lecturer access required",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "Access request not found",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            }
           }
         }
       }
     },
-    "/api/learning-units/courses/{courseId}/units": {
+    "/courses/{courseId}/units": {
+      "get": {
+        "tags": [
+          "Student"
+        ],
+        "summary": "Get learning units for a course",
+        "parameters": [
+          {
+            "name": "courseId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Learning units",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GetLearningUnitsResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "enrollment required"
+          }
+        }
+      },
       "post": {
-        "tags": ["Learning Units"],
+        "tags": [
+          "Lecturer"
+        ],
         "summary": "Create learning unit",
-        "description": "Create a new learning unit for a course (Lecturer only)",
         "parameters": [
           {
             "name": "courseId",
@@ -816,26 +1506,53 @@
           "content": {
             "application/json": {
               "schema": {
-                "type": "object",
-                "required": ["title", "description"],
-                "properties": {
-                  "title": {
-                    "type": "string"
-                  },
-                  "description": {
-                    "type": "string"
-                  },
-                  "order": {
-                    "type": "integer"
-                  }
-                }
+                "$ref": "#/components/schemas/CreateLearningUnitRequest"
               }
             }
           }
         },
         "responses": {
           "201": {
-            "description": "Learning unit created successfully",
+            "description": "Learning unit created",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "unit": {
+                      "$ref": "#/components/schemas/LearningUnit"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Lecturer access required"
+          }
+        }
+      }
+    },
+    "/learning-units/{unitId}": {
+      "get": {
+        "tags": [
+          "Student"
+        ],
+        "summary": "Get learning unit by ID",
+        "parameters": [
+          {
+            "name": "unitId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Learning unit",
             "content": {
               "application/json": {
                 "schema": {
@@ -844,25 +1561,54 @@
               }
             }
           },
-          "403": {
-            "description": "Forbidden - Lecturer access required",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            }
+          "404": {
+            "description": "Not found"
           }
         }
       },
-      "get": {
-        "tags": ["Learning Units"],
-        "summary": "Get learning units",
-        "description": "Get learning units for a course (Student access)",
+      "put": {
+        "tags": [
+          "Lecturer"
+        ],
+        "summary": "Update learning unit",
         "parameters": [
           {
-            "name": "courseId",
+            "name": "unitId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateLearningUnitRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Learning unit updated"
+          },
+          "403": {
+            "description": "Lecturer access required"
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "Lecturer"
+        ],
+        "summary": "Delete learning unit",
+        "parameters": [
+          {
+            "name": "unitId",
             "in": "path",
             "required": true,
             "schema": {
@@ -873,73 +1619,7 @@
         ],
         "responses": {
           "200": {
-            "description": "List of learning units",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "array",
-                  "items": {
-                    "$ref": "#/components/schemas/LearningUnit"
-                  }
-                }
-              }
-            }
-          },
-          "403": {
-            "description": "Forbidden - Course access required",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/api/learning-units/{unitId}/materials": {
-      "post": {
-        "tags": ["Learning Units"],
-        "summary": "Add materials",
-        "description": "Add materials to a learning unit (Lecturer only)",
-        "parameters": [
-          {
-            "name": "unitId",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "format": "uuid"
-            }
-          }
-        ],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "type": "object",
-                "required": ["title", "content"],
-                "properties": {
-                  "title": {
-                    "type": "string"
-                  },
-                  "content": {
-                    "type": "string"
-                  },
-                  "type": {
-                    "type": "string",
-                    "enum": ["text", "video", "pdf", "link"]
-                  }
-                }
-              }
-            }
-          }
-        },
-        "responses": {
-          "201": {
-            "description": "Material added successfully",
+            "description": "Learning unit deleted",
             "content": {
               "application/json": {
                 "schema": {
@@ -947,288 +1627,16 @@
                 }
               }
             }
-          },
-          "403": {
-            "description": "Forbidden - Lecturer access required",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            }
           }
         }
       }
     },
-    "/api/learning-units/{unitId}/assignments": {
-      "post": {
-        "tags": ["Learning Units"],
-        "summary": "Create assignment",
-        "description": "Create an assignment for a learning unit (Lecturer only)",
-        "parameters": [
-          {
-            "name": "unitId",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "format": "uuid"
-            }
-          }
-        ],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "type": "object",
-                "required": ["title", "description", "due_date"],
-                "properties": {
-                  "title": {
-                    "type": "string"
-                  },
-                  "description": {
-                    "type": "string"
-                  },
-                  "due_date": {
-                    "type": "string",
-                    "format": "date-time"
-                  },
-                  "max_points": {
-                    "type": "integer"
-                  }
-                }
-              }
-            }
-          }
-        },
-        "responses": {
-          "201": {
-            "description": "Assignment created successfully",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/SuccessResponse"
-                }
-              }
-            }
-          },
-          "403": {
-            "description": "Forbidden - Lecturer access required",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/api/learning-units/{unitId}/quizzes": {
-      "post": {
-        "tags": ["Learning Units"],
-        "summary": "Create quiz",
-        "description": "Create a quiz for a learning unit (Lecturer only)",
-        "parameters": [
-          {
-            "name": "unitId",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "format": "uuid"
-            }
-          }
-        ],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "type": "object",
-                "required": ["title", "questions"],
-                "properties": {
-                  "title": {
-                    "type": "string"
-                  },
-                  "description": {
-                    "type": "string"
-                  },
-                  "questions": {
-                    "type": "array",
-                    "items": {
-                      "$ref": "#/components/schemas/Question"
-                    }
-                  }
-                }
-              }
-            }
-          }
-        },
-        "responses": {
-          "201": {
-            "description": "Quiz created successfully",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Quiz"
-                }
-              }
-            }
-          },
-          "403": {
-            "description": "Forbidden - Lecturer access required",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/api/learning-units/{unitId}/quizzes/{quizId}": {
+    "/progress/courses/{courseId}/me": {
       "get": {
-        "tags": ["Learning Units"],
-        "summary": "Get quiz",
-        "description": "Get a specific quiz (Student access)",
-        "parameters": [
-          {
-            "name": "unitId",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "format": "uuid"
-            }
-          },
-          {
-            "name": "quizId",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "format": "uuid"
-            }
-          }
+        "tags": [
+          "Student"
         ],
-        "responses": {
-          "200": {
-            "description": "Quiz details",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Quiz"
-                }
-              }
-            }
-          },
-          "403": {
-            "description": "Forbidden - Course access required",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "Quiz not found",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/api/learning-units/{unitId}/flashcard-sets": {
-      "post": {
-        "tags": ["Learning Units"],
-        "summary": "Create flashcard set",
-        "description": "Create a flashcard set for a learning unit (Lecturer only)",
-        "parameters": [
-          {
-            "name": "unitId",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "format": "uuid"
-            }
-          }
-        ],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "type": "object",
-                "required": ["title", "flashcards"],
-                "properties": {
-                  "title": {
-                    "type": "string"
-                  },
-                  "description": {
-                    "type": "string"
-                  },
-                  "flashcards": {
-                    "type": "array",
-                    "items": {
-                      "type": "object",
-                      "properties": {
-                        "front": {
-                          "type": "string"
-                        },
-                        "back": {
-                          "type": "string"
-                        }
-                      }
-                    }
-                  }
-                }
-              }
-            }
-          }
-        },
-        "responses": {
-          "201": {
-            "description": "Flashcard set created successfully",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/SuccessResponse"
-                }
-              }
-            }
-          },
-          "403": {
-            "description": "Forbidden - Lecturer access required",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/api/progress/courses/{courseId}/me": {
-      "get": {
-        "tags": ["Progress"],
-        "summary": "Get my course progress",
-        "description": "Get current user's progress in a specific course",
+        "summary": "View course progress",
         "parameters": [
           {
             "name": "courseId",
@@ -1252,175 +1660,26 @@
                       "type": "string",
                       "format": "uuid"
                     },
-                    "completion_percentage": {
-                      "type": "number",
-                      "format": "float"
+                    "student_id": {
+                      "type": "string",
+                      "format": "uuid"
                     },
-                    "completed_units": {
+                    "progress": {
                       "type": "array",
                       "items": {
-                        "type": "string",
-                        "format": "uuid"
-                      }
-                    },
-                    "total_units": {
-                      "type": "integer"
-                    }
-                  }
-                }
-              }
-            }
-          },
-          "403": {
-            "description": "Forbidden - Course access required",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/api/progress/units/{unitId}/complete": {
-      "post": {
-        "tags": ["Progress"],
-        "summary": "Mark unit as complete",
-        "description": "Mark a learning unit as completed",
-        "parameters": [
-          {
-            "name": "unitId",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "format": "uuid"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Unit marked as complete",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/SuccessResponse"
-                }
-              }
-            }
-          },
-          "403": {
-            "description": "Forbidden - Unit access required",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/api/progress/assignments/{assignmentId}/submit": {
-      "post": {
-        "tags": ["Progress"],
-        "summary": "Submit assignment",
-        "description": "Submit an assignment solution",
-        "parameters": [
-          {
-            "name": "assignmentId",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "format": "uuid"
-            }
-          }
-        ],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "type": "object",
-                "required": ["content"],
-                "properties": {
-                  "content": {
-                    "type": "string"
-                  },
-                  "attachments": {
-                    "type": "array",
-                    "items": {
-                      "type": "string"
-                    }
-                  }
-                }
-              }
-            }
-          }
-        },
-        "responses": {
-          "200": {
-            "description": "Assignment submitted successfully",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/SuccessResponse"
-                }
-              }
-            }
-          },
-          "403": {
-            "description": "Forbidden - Assignment access required",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/api/progress/quizzes/{quizId}/submit": {
-      "post": {
-        "tags": ["Progress"],
-        "summary": "Submit quiz",
-        "description": "Submit quiz answers",
-        "parameters": [
-          {
-            "name": "quizId",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "format": "uuid"
-            }
-          }
-        ],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "type": "object",
-                "required": ["answers"],
-                "properties": {
-                  "answers": {
-                    "type": "array",
-                    "items": {
-                      "type": "object",
-                      "properties": {
-                        "question_id": {
-                          "type": "string",
-                          "format": "uuid"
-                        },
-                        "answer": {
-                          "type": "string"
+                        "type": "object",
+                        "properties": {
+                          "learning_unit_id": {
+                            "type": "string",
+                            "format": "uuid"
+                          },
+                          "completed": {
+                            "type": "boolean"
+                          },
+                          "completed_at": {
+                            "type": "string",
+                            "format": "date-time"
+                          }
                         }
                       }
                     }
@@ -1429,84 +1688,90 @@
               }
             }
           }
-        },
-        "responses": {
-          "200": {
-            "description": "Quiz submitted successfully",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "score": {
-                      "type": "number",
-                      "format": "float"
-                    },
-                    "total_questions": {
-                      "type": "integer"
-                    },
-                    "correct_answers": {
-                      "type": "integer"
-                    }
-                  }
-                }
-              }
-            }
-          },
-          "403": {
-            "description": "Forbidden - Quiz access required",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            }
-          }
         }
       }
     },
-    "/api/ai/chat": {
+    "/progress": {
       "post": {
-        "tags": ["AI Tools"],
-        "summary": "AI Chat",
-        "description": "Conversational Q&A with AI based on course context",
+        "tags": [
+          "Student"
+        ],
+        "summary": "Update progress",
         "requestBody": {
           "required": true,
           "content": {
             "application/json": {
               "schema": {
-                "type": "object",
-                "required": ["question", "context"],
-                "properties": {
-                  "question": {
-                    "type": "string"
-                  },
-                  "context": {
-                    "type": "array",
-                    "items": {
-                      "type": "string",
-                      "format": "uuid"
-                    },
-                    "description": "List of course/unit IDs for context"
-                  }
-                }
+                "$ref": "#/components/schemas/ProgressUpdateRequest"
               }
             }
           }
         },
         "responses": {
           "200": {
-            "description": "AI response",
+            "description": "Progress updated",
             "content": {
               "application/json": {
                 "schema": {
                   "type": "object",
                   "properties": {
-                    "response": {
+                    "message": {
                       "type": "string"
                     },
-                    "sources": {
+                    "progress": {
+                      "type": "object",
+                      "properties": {
+                        "learning_unit_id": {
+                          "type": "string",
+                          "format": "uuid"
+                        },
+                        "completed": {
+                          "type": "boolean"
+                        },
+                        "completed_at": {
+                          "type": "string",
+                          "format": "date-time"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "/progress/assignments/{assignmentId}/submit": {
+        "post": {
+          "tags": [
+            "Student"
+          ],
+          "summary": "Submit assignment",
+          "parameters": [
+            {
+              "name": "assignmentId",
+              "in": "path",
+              "required": true,
+              "schema": {
+                "type": "string",
+                "format": "uuid"
+              }
+            }
+          ],
+          "requestBody": {
+            "required": true,
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "content"
+                  ],
+                  "properties": {
+                    "content": {
+                      "type": "string"
+                    },
+                    "attachments": {
                       "type": "array",
                       "items": {
                         "type": "string"
@@ -1517,131 +1782,56 @@
               }
             }
           },
-          "400": {
-            "description": "Bad request",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/api/ai/generate-personal-quiz": {
-      "post": {
-        "tags": ["AI Tools"],
-        "summary": "Generate Personal Quiz",
-        "description": "Generate a personalized quiz based on course context",
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "type": "object",
-                "required": ["context"],
-                "properties": {
-                  "context": {
-                    "type": "array",
-                    "items": {
-                      "type": "string",
-                      "format": "uuid"
-                    },
-                    "description": "List of course/unit IDs for context"
-                  },
-                  "difficulty": {
-                    "type": "string",
-                    "enum": ["easy", "medium", "hard"]
-                  },
-                  "question_count": {
-                    "type": "integer",
-                    "minimum": 1,
-                    "maximum": 20,
-                    "default": 10
+          "responses": {
+            "200": {
+              "description": "Assignment submitted successfully",
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/SuccessResponse"
                   }
                 }
               }
             }
           }
-        },
-        "responses": {
-          "200": {
-            "description": "Generated quiz",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Quiz"
-                }
-              }
-            }
-          },
-          "400": {
-            "description": "Bad request",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            }
-          }
         }
-      }
-    },
-    "/api/ai/generate-personal-flashcards": {
-      "post": {
-        "tags": ["AI Tools"],
-        "summary": "Generate Personal Flashcards",
-        "description": "Generate personalized flashcards based on course context",
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
+      },
+      "/progress/quizzes/{quizId}/submit": {
+        "post": {
+          "tags": [
+            "Student"
+          ],
+          "summary": "Submit quiz",
+          "parameters": [
+            {
+              "name": "quizId",
+              "in": "path",
+              "required": true,
               "schema": {
-                "type": "object",
-                "required": ["context"],
-                "properties": {
-                  "context": {
-                    "type": "array",
-                    "items": {
-                      "type": "string",
-                      "format": "uuid"
-                    },
-                    "description": "List of course/unit IDs for context"
-                  },
-                  "card_count": {
-                    "type": "integer",
-                    "minimum": 1,
-                    "maximum": 50,
-                    "default": 20
-                  }
-                }
+                "type": "string",
+                "format": "uuid"
               }
             }
-          }
-        },
-        "responses": {
-          "200": {
-            "description": "Generated flashcards",
+          ],
+          "requestBody": {
+            "required": true,
             "content": {
               "application/json": {
                 "schema": {
                   "type": "object",
+                  "required": [
+                    "answers"
+                  ],
                   "properties": {
-                    "title": {
-                      "type": "string"
-                    },
-                    "flashcards": {
+                    "answers": {
                       "type": "array",
                       "items": {
                         "type": "object",
                         "properties": {
-                          "front": {
+                          "question_id": {
                             "type": "string"
                           },
-                          "back": {
+                          "answer": {
                             "type": "string"
                           }
                         }
@@ -1652,12 +1842,45 @@
               }
             }
           },
-          "400": {
-            "description": "Bad request",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
+          "responses": {
+            "200": {
+              "description": "Quiz submitted successfully",
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "type": "object",
+                    "properties": {
+                      "score": {
+                        "type": "number"
+                      },
+                      "total_questions": {
+                        "type": "integer"
+                      },
+                      "correct_answers": {
+                        "type": "integer"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "/enrollments/me": {
+        "get": {
+          "tags": [
+            "Enrollments"
+          ],
+          "summary": "View my enrollments",
+          "responses": {
+            "200": {
+              "description": "My enrollments",
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/GetEnrollmentsResponse"
+                  }
                 }
               }
             }
@@ -1668,28 +1891,16 @@
   },
   "tags": [
     {
-      "name": "Authentication",
-      "description": "User authentication and authorization endpoints"
+      "name": "Student",
+      "description": "Student-related operations including authentication, course discovery, enrollment, learning, and progress tracking"
+    },
+    {
+      "name": "Lecturer",
+      "description": "Lecturer-related operations including authentication, course management, content management, and access control"
     },
     {
       "name": "Admin",
-      "description": "Administrative functions for managing users and system"
-    },
-    {
-      "name": "Courses",
-      "description": "Course management and enrollment endpoints"
-    },
-    {
-      "name": "Learning Units",
-      "description": "Learning unit content management endpoints"
-    },
-    {
-      "name": "Progress",
-      "description": "Student progress tracking and submission endpoints"
-    },
-    {
-      "name": "AI Tools",
-      "description": "AI-powered learning assistance endpoints"
+      "description": "Administrative operations including user management, lecturer approval, and platform-wide content management"
     }
   ]
 }
