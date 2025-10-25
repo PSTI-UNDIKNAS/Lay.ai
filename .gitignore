@@ -1,13 +1,135 @@
+# macOS
 .DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Go backend
 lay.ai-backend
 *.exe
 *.exe~
 *.dll
 *.so
 *.dylib
+apps/backend/api
+bin/
+vendor/
+
+# Environment variables
 .env
 *.env
 *.env.local
-apps/backend/api
+*.env.development.local
+*.env.test.local
+*.env.production.local
+
+# Dependencies
+node_modules/
+.pnp
+.pnp.js
+
+# Turborepo
+.turbo/
+.turbo
+
+# Next.js
+.next/
+out/
+build/
+dist/
+
+# Production builds
+apps/*/build/
+apps/*/dist/
+apps/*/.next/
+packages/*/build/
+packages/*/dist/
+
+# Testing
+coverage/
+.nyc_output
+*.lcov
+
+# Logs
+logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+lerna-debug.log*
+.pnpm-debug.log*
+
+# Runtime data
+pids
+*.pid
+*.seed
+*.pid.lock
+
+# Coverage directory used by tools like istanbul
+coverage/
+*.lcov
+
+# nyc test coverage
+.nyc_output
+
+# Dependency directories
+node_modules/
+jspm_packages/
+
+# TypeScript cache
+*.tsbuildinfo
+
+# Optional npm cache directory
+.npm
+
+# Optional eslint cache
+.eslintcache
+
+# Optional stylelint cache
+.stylelintcache
+
+# Microbundle cache
+.rpt2_cache/
+.rts2_cache_cjs/
+.rts2_cache_es/
+.rts2_cache_umd/
+
+# Optional REPL history
+.node_repl_history
+
+# Output of 'npm pack'
+*.tgz
+
+# Yarn Integrity file
+.yarn-integrity
+
+# parcel-bundler cache (https://parceljs.org/)
+.cache
+.parcel-cache
+
+# Stores VSCode versions used for testing VSCode extensions
+.vscode-test
+
+# yarn v2
+.yarn/cache
+.yarn/unplugged
+.yarn/build-state.yml
+.yarn/install-state.gz
+.pnp.*
+
+# IDEs
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Temporary files
+*.tmp
+*.temp
+
+# Project specific
 *project-bible.md
-bin/

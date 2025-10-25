@@ -1,0 +1,23 @@
+{
+  "name": "layai-monorepo",
+  "private": true,
+  "packageManager": "bun@1.0.0",
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "build": "turbo build",
+    "dev": "turbo dev",
+    "lint": "turbo lint",
+    "type-check": "turbo type-check",
+    "clean": "turbo clean",
+    "watch": "turbo watch"
+  },
+  "devDependencies": {
+    "turbo": "^2.5.8"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}
