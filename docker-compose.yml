@@ -24,6 +24,45 @@ services:
     depends_on:
       - database
 
+  admin-web:
+    build:
+      context: .
+      dockerfile: ./apps/admin-web/Dockerfile
+    restart: unless-stopped
+    ports:
+      - "3100:3000"
+    environment:
+      - NODE_ENV=production
+      - NEXT_PUBLIC_API_URL=${NEXT_PUBLIC_API_URL:-http://localhost:8080}
+    depends_on:
+      - backend
+
+  lecturer-web:
+    build:
+      context: .
+      dockerfile: ./apps/lecturer-web/Dockerfile
+    restart: unless-stopped
+    ports:
+      - "3101:3000"
+    environment:
+      - NODE_ENV=production
+      - NEXT_PUBLIC_API_URL=${NEXT_PUBLIC_API_URL:-http://localhost:8080}
+    depends_on:
+      - backend
+
+  student-web:
+    build:
+      context: .
+      dockerfile: ./apps/student-web/Dockerfile
+    restart: unless-stopped
+    ports:
+      - "3102:3000"
+    environment:
+      - NODE_ENV=production
+      - NEXT_PUBLIC_API_URL=${NEXT_PUBLIC_API_URL:-http://localhost:8080}
+    depends_on:
+      - backend
+
   seed-admin:
     image: golang:1.23-alpine
     working_dir: /app
