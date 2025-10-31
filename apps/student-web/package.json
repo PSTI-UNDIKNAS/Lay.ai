@@ -11,7 +11,11 @@
   "dependencies": {
     "react": "19.2.0",
     "react-dom": "19.2.0",
-    "next": "16.0.0"
+    "next": "16.0.0",
+    "@layai/types": "file:../../packages/types",
+    "@layai/utils": "file:../../packages/utils",
+    "@layai/store": "file:../../packages/store",
+    "@layai/ui": "file:../../packages/ui"
   },
   "devDependencies": {
     "babel-plugin-react-compiler": "1.0.0",
