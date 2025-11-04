@@ -12,10 +12,18 @@
     "lint": "turbo lint",
     "type-check": "turbo type-check",
     "clean": "turbo clean",
-    "watch": "turbo watch"
+    "watch": "turbo watch",
+    "dev:gateway": "cd apps/gateway && npm run dev",
+    "dev:student": "cd apps/student-web && PORT=3001 npm run dev",
+    "dev:lecturer": "cd apps/lecturer-web && PORT=3002 npm run dev",
+    "dev:backend": "cd apps/backend && npm run dev",
+    "dev:all": "concurrently \"npm run dev:gateway\" \"npm run dev:student\" \"npm run dev:lecturer\" \"npm run dev:backend\"",
+    "start:gateway": "cd apps/gateway && npm start",
+    "start:all": "concurrently \"npm run start:gateway\" \"cd apps/student-web && PORT=3001 npm start\" \"cd apps/lecturer-web && PORT=3002 npm start\" \"cd apps/backend && npm start\""
   },
   "devDependencies": {
-    "turbo": "^2.5.8"
+    "turbo": "^2.5.8",
+    "concurrently": "^8.2.2"
   },
   "engines": {
     "node": ">=18"

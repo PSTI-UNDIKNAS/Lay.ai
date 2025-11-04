@@ -5,10 +5,10 @@
   "main": "./index.ts",
   "types": "./index.ts",
   "scripts": {
-    "build": "tsc",
-    "dev": "tsc --watch",
+    "build": "bun run tsc",
+    "dev": "bun run tsc --watch",
     "lint": "eslint .",
-    "type-check": "tsc --noEmit"
+    "type-check": "bun run tsc --noEmit"
   },
   "devDependencies": {
     "eslint": "^8.0.0",

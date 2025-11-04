@@ -2,16 +2,18 @@
   "name": "@layai/store",
   "version": "0.0.0",
   "private": true,
-  "main": "./index.ts",
-  "types": "./index.ts",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
   "scripts": {
-    "build": "tsc",
-    "dev": "tsc --watch",
+    "build": "bun build index.ts --outdir dist --target node",
+    "dev": "bun run tsc --watch",
     "lint": "eslint .",
-    "type-check": "tsc --noEmit"
+    "type-check": "bun run tsc --noEmit"
   },
   "dependencies": {
-    "zustand": "^4.4.0"
+    "zustand": "^4.4.0",
+    "@layai/types": "file:../types",
+    "@layai/utils": "file:../utils"
   },
   "devDependencies": {
     "@types/react": "^18.2.0",

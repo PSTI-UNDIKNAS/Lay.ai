@@ -4,6 +4,8 @@ const nextConfig: NextConfig = {
   /* config options here */
   reactCompiler: true,
   output: "standalone",
+  basePath: "/lecturer",
+  transpilePackages: ["@layai/ui", "@layai/store", "@layai/utils", "@layai/types"],
 };
 
 export default nextConfig;
