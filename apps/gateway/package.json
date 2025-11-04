@@ -12,9 +12,9 @@
     "react": "19.2.0",
     "react-dom": "19.2.0",
     "next": "16.0.0",
-    "@layai/types": "file:../../packages/types",
-    "@layai/utils": "file:../../packages/utils",
-    "@layai/ui": "file:../../packages/ui"
+    "@layai/types": "workspace:*",
+    "@layai/utils": "workspace:*",
+    "@layai/ui": "workspace:*"
   },
   "devDependencies": {
     "@types/node": "^20",
