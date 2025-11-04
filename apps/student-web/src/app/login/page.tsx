@@ -22,7 +22,8 @@ export default function StudentLoginPage() {
       }
 
       // Call the login API
-      const response = await fetch('http://localhost:8080/api/auth/login', {
+      // Use gateway-relative API path so it works in Docker and local dev
+      const response = await fetch('/api/auth/login', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

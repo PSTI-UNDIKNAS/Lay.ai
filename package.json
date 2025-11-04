@@ -23,7 +23,8 @@
   },
   "devDependencies": {
     "turbo": "^2.5.8",
-    "concurrently": "^8.2.2"
+    "concurrently": "^8.2.2",
+    "babel-plugin-react-compiler": "^1.0.0"
   },
   "engines": {
     "node": ">=18"
