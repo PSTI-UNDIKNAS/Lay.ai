@@ -1,6 +1,7 @@
 services:
   database:
-    image: postgres:17-alpine
+    # image: postgres:17-alpine
+    image: pgvector/pgvector:0.8.1-pg17-trixie #postgres 17 + pgvector
     restart: unless-stopped
     environment:
       # These values are now read from your .env file
