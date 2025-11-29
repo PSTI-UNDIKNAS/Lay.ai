@@ -5,12 +5,18 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"os"
-	"path/filepath"
+	"path"
 	"regexp"
 	"strings"
 	"time"
 
+	"github.com/aws/aws-sdk-go-v2/aws"
+	v4 "github.com/aws/aws-sdk-go-v2/aws/signer/v4"
+	"github.com/aws/aws-sdk-go-v2/config"
+	"github.com/aws/aws-sdk-go-v2/credentials"
+	"github.com/aws/aws-sdk-go-v2/service/s3"
 	"github.com/google/uuid"
 	pdf "github.com/ledongthuc/pdf"
 	genai "google.golang.org/genai"
@@ -21,40 +27,100 @@ import (
 const defaultChunkSize = 1200   // approx chars per chunk
 const defaultChunkOverlap = 200 // overlap between chunks to preserve context
 const embeddingModel = "gemini-embedding-001"
+const presignedURLExpiry = 15 * time.Minute
 
 // AIService provides PDF ingestion, chunking, and embeddings generation.
 type AIService struct {
-	store  *store.AIStore
-	client *genai.Client
+	store         *store.AIStore
+	docSvc        *DocumentService
+	client        *genai.Client
+	s3Client      *s3.Client
+	presignClient *s3.PresignClient
+	r2BucketName  string
+	r2PublicURL   string
 }
 
-func NewAIService(s *store.AIStore) *AIService {
+func NewAIService(s *store.AIStore, docSvc *DocumentService) *AIService {
+	// Init Gemini Client
 	apiKey := os.Getenv("GEMINI_API_KEY")
 	if apiKey == "" {
-		// Fallback to GOOGLE_API_KEY supported by the SDK
 		apiKey = os.Getenv("GOOGLE_API_KEY")
 	}
-	// Create a client targeting Gemini Developer API
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
-	client, err := genai.NewClient(ctx, &genai.ClientConfig{
+	gclient, err := genai.NewClient(ctx, &genai.ClientConfig{
 		APIKey:  apiKey,
 		Backend: genai.BackendGeminiAPI,
 	})
 	if err != nil {
-		// Return service with nil client; methods will surface a friendly error
-		return &AIService{store: s, client: nil}
+		gclient = nil // Service methods will handle nil client
 	}
-	return &AIService{store: s, client: client}
+
+	// Init R2/S3 Client
+	accountID := os.Getenv("R2_ACCOUNT_ID")
+	accessKeyID := os.Getenv("R2_ACCESS_KEY_ID")
+	accessKeySecret := os.Getenv("R2_SECRET_ACCESS_KEY")
+	bucketName := os.Getenv("R2_BUCKET_NAME")
+	publicURL := os.Getenv("R2_PUBLIC_URL")
+
+	r2Resolver := aws.EndpointResolverWithOptionsFunc(func(service, region string, options ...interface{}) (aws.Endpoint, error) {
+		return aws.Endpoint{
+			URL:               fmt.Sprintf("https://%s.r2.cloudflarestorage.com", accountID),
+			HostnameImmutable: true,
+			Source:            aws.EndpointSourceCustom,
+		}, nil
+	})
+
+	cfg, err := config.LoadDefaultConfig(ctx,
+		config.WithRegion("auto"),
+		config.WithEndpointResolverWithOptions(r2Resolver),
+		config.WithCredentialsProvider(credentials.NewStaticCredentialsProvider(accessKeyID, accessKeySecret, "")),
+	)
+	if err != nil {
+		// Return service with nil clients; methods will surface friendly errors
+		return &AIService{store: s, docSvc: docSvc, client: gclient}
+	}
+
+	s3Client := s3.NewFromConfig(cfg, func(o *s3.Options) {
+		o.APIOptions = append(o.APIOptions, v4.SwapComputePayloadSHA256ForUnsignedPayloadMiddleware)
+	})
+	presignClient := s3.NewPresignClient(s3Client)
+
+	return &AIService{
+		store:         s,
+		docSvc:        docSvc,
+		client:        gclient,
+		s3Client:      s3Client,
+		presignClient: presignClient,
+		r2BucketName:  bucketName,
+		r2PublicURL:   publicURL,
+	}
 }
 
-// IngestOptions controls chunking and optional persistence.
-type IngestOptions struct {
-	DocumentID     string
-	CourseID       string
-	LearningUnitID string
-	ChunkSize      int
-	ChunkOverlap   int
+// GeneratePresignedUploadURL creates a temporary URL for a client to upload a file directly to R2.
+// It generates a unique filename to prevent collisions.
+func (s *AIService) GeneratePresignedUploadURL(ctx context.Context, originalFileName string) (string, string, error) {
+	if s.presignClient == nil {
+		return "", "", errors.New("R2/S3 client not initialized")
+	}
+
+	// Generate a new UUID and preserve the original file extension.
+	newID := uuid.New().String()
+	fileExtension := path.Ext(originalFileName)
+	newFileName := fmt.Sprintf("%s%s", newID, fileExtension)
+
+	req, err := s.presignClient.PresignPutObject(ctx, &s3.PutObjectInput{
+		Bucket:      aws.String(s.r2BucketName),
+		Key:         aws.String(newFileName),
+		ContentType: aws.String("application/pdf"),
+	}, func(opts *s3.PresignOptions) {
+		opts.Expires = presignedURLExpiry
+	})
+	if err != nil {
+		return "", "", fmt.Errorf("failed to generate presigned URL: %w", err)
+	}
+
+	return req.URL, newFileName, nil
 }
 
 // ChunkEmbedding is a chunk with its embedding vector.
@@ -63,30 +129,59 @@ type ChunkEmbedding struct {
 	Embedding []float32 `json:"embedding"`
 }
 
-// IngestPDF reads a PDF from the repo root, chunks content, embeds using Gemini,
-// and optionally persists chunks if DocumentID is provided.
-func (s *AIService) IngestPDF(ctx context.Context, fileName string, opts IngestOptions) ([]ChunkEmbedding, error) {
-	if fileName == "" {
-		return nil, errors.New("file_name is required")
+// IngestPDF downloads a PDF from R2, creates a document record, chunks content,
+// embeds using Gemini, and persists the chunks.
+func (s *AIService) IngestPDF(ctx context.Context, originalFileName, newFileName, learningUnitIDStr string) ([]ChunkEmbedding, error) {
+	if newFileName == "" {
+		return nil, errors.New("new_file_name is required")
 	}
-
-	chunkSize := opts.ChunkSize
-	if chunkSize <= 0 {
-		chunkSize = defaultChunkSize
+	if originalFileName == "" {
+		return nil, errors.New("original_file_name is required")
 	}
-	overlap := opts.ChunkOverlap
-	if overlap < 0 {
-		overlap = defaultChunkOverlap
-	}
-
-	// Resolve path to a PDF located at repo root relative to the backend
-	pdfPath := resolvePDFPath(fileName)
-	content, err := readPDFPlainText(pdfPath)
+	luID, err := uuid.Parse(learningUnitIDStr)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("invalid learning_unit_id: %w", err)
 	}
 
-	chunks := chunkText(content, chunkSize, overlap)
+	// Step 1: Download the PDF from R2 using the authenticated S3 client and the unique name.
+	// This is done BEFORE creating a database record to ensure the file exists.
+	if s.s3Client == nil {
+		return nil, errors.New("S3 client not initialized")
+	}
+	getObjectOutput, err := s.s3Client.GetObject(ctx, &s3.GetObjectInput{
+		Bucket: aws.String(s.r2BucketName),
+		Key:    aws.String(newFileName),
+	})
+	if err != nil {
+		return nil, fmt.Errorf("failed to download PDF from R2: %w", err)
+	}
+	defer getObjectOutput.Body.Close()
+
+	pdfBytes, err := io.ReadAll(getObjectOutput.Body)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read PDF body: %w", err)
+	}
+
+	// Step 2: Now that the file is confirmed to exist, create the document record.
+	storagePath := fmt.Sprintf("%s/%s", s.r2PublicURL, newFileName)
+	doc, err := s.docSvc.CreateDocument(ctx, CreateDocumentParams{
+		LearningUnitID: luID,
+		FileName:       originalFileName,
+		StoragePath:    storagePath,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("failed to create document record: %w", err)
+	}
+
+	content, err := readPDFPlainText(pdfBytes)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read PDF content: %w", err)
+	}
+	// Sanitize the extracted text to remove/replace invalid UTF-8 sequences and null bytes.
+	content = sanitizeString(content)
+
+	// Step 3: Process the downloaded content.
+	chunks := chunkText(content, defaultChunkSize, defaultChunkOverlap)
 	if len(chunks) == 0 {
 		return nil, errors.New("no text extracted from PDF")
 	}
@@ -101,27 +196,10 @@ func (s *AIService) IngestPDF(ctx context.Context, fileName string, opts IngestO
 		results = append(results, ChunkEmbedding{Content: chunks[i], Embedding: vectors[i]})
 	}
 
-	// Persist if a valid DocumentID is provided
-	if opts.DocumentID != "" && s.store != nil {
-		docID, err := uuid.Parse(opts.DocumentID)
-		if err == nil {
-			var courseUUIDPtr *uuid.UUID
-			var luUUIDPtr *uuid.UUID
-			if opts.CourseID != "" {
-				if cid, e := uuid.Parse(opts.CourseID); e == nil {
-					courseUUIDPtr = &cid
-				}
-			}
-			if opts.LearningUnitID != "" {
-				if lid, e := uuid.Parse(opts.LearningUnitID); e == nil {
-					luUUIDPtr = &lid
-				}
-			}
-			for i := range results {
-				if err := s.store.CreateDocumentChunk(ctx, docID, courseUUIDPtr, luUUIDPtr, results[i].Content, results[i].Embedding); err != nil {
-					return nil, fmt.Errorf("persisting chunk %d failed: %w", i, err)
-				}
-			}
+	// Step 4: Persist the chunks, linking them to the new document ID.
+	for i := range results {
+		if err := s.store.CreateDocumentChunk(ctx, doc.ID, nil, &doc.LearningUnitID, results[i].Content, results[i].Embedding); err != nil {
+			return nil, fmt.Errorf("persisting chunk %d failed: %w", i, err)
 		}
 	}
 
@@ -153,12 +231,11 @@ func (s *AIService) SearchSimilar(ctx context.Context, query string, topK int, d
 }
 
 // readPDFPlainText extracts plain text from a PDF using ledongthuc/pdf.
-func readPDFPlainText(path string) (string, error) {
-	f, r, err := pdf.Open(path)
+func readPDFPlainText(data []byte) (string, error) {
+	r, err := pdf.NewReader(bytes.NewReader(data), int64(len(data)))
 	if err != nil {
 		return "", err
 	}
-	defer f.Close()
 
 	var buf bytes.Buffer
 	rd, err := r.GetPlainText()
@@ -169,6 +246,15 @@ func readPDFPlainText(path string) (string, error) {
 		return "", err
 	}
 	return buf.String(), nil
+}
+
+// sanitizeString removes invalid UTF-8 sequences and null bytes from the string.
+func sanitizeString(s string) string {
+	// Remove invalid UTF-8 sequences
+	s = strings.ToValidUTF8(s, "")
+	// Remove null bytes which Postgres doesn't support in text fields
+	s = strings.ReplaceAll(s, "\x00", "")
+	return s
 }
 
 // chunkText splits text by sentence-like boundaries and assembles chunks
@@ -249,28 +335,6 @@ func (s *AIService) embedTexts(ctx context.Context, texts []string) ([][]float32
 		out = append(out, e.Values)
 	}
 	return out, nil
-}
-
-// resolvePDFPath attempts common locations relative to backend working dir.
-// Preferred is repo root: ../../<file> from apps/backend.
-func resolvePDFPath(fileName string) string {
-	// Absolute path provided
-	if filepath.IsAbs(fileName) {
-		return fileName
-	}
-	candidates := []string{
-		filepath.Join("..", "..", fileName),       // repo root from apps/backend
-		filepath.Join(".", fileName),              // current dir
-		filepath.Join("..", fileName),             // apps/
-		filepath.Join("..", "..", "..", fileName), // if backend runs from deeper path
-	}
-	for _, p := range candidates {
-		if _, err := os.Stat(p); err == nil {
-			return p
-		}
-	}
-	// Default to repo root assumption
-	return filepath.Join("..", "..", fileName)
 }
 
 // AnswerQuery composes a prompt from top-K retrieved chunks and asks the LLM.

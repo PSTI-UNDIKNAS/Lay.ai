@@ -28,6 +28,7 @@ func SetupRoutes(db *pgxpool.Pool) *gin.Engine {
 	submissionStore := store.NewSubmissionStore(db)
 	enrollmentStore := store.NewEnrollmentStore(db)
 	aiStore := store.NewAIStore(db)
+	documentStore := store.NewDocumentStore(db)
 
 	// Initialize services
 	authService := services.NewAuthService(userStore)
@@ -38,7 +39,8 @@ func SetupRoutes(db *pgxpool.Pool) *gin.Engine {
 	quizService := services.NewQuizService(quizStore)
 	submissionService := services.NewSubmissionService(submissionStore)
 	enrollmentService := services.NewEnrollmentService(enrollmentStore, courseStore)
-	aiService := services.NewAIService(aiStore)
+	documentService := services.NewDocumentService(documentStore)
+	aiService := services.NewAIService(aiStore, documentService)
 
 	// Initialize handlers
 	authHandler := handlers.NewAuthHandler(authService)
@@ -175,6 +177,7 @@ func SetupRoutes(db *pgxpool.Pool) *gin.Engine {
 		// AI routes
 		ai := v1.Group("/ai")
 		{
+			ai.POST("/upload-url", middleware.AuthWithStatusMiddleware(authService), middleware.LecturerOnlyMiddleware(authService), aiHandler.GenerateUploadURLHandler)
 			ai.POST("/ingest", aiHandler.IngestPDFHandler)
 			ai.POST("/search", aiHandler.SearchSimilarHandler)
 			ai.POST("/answer", aiHandler.AnswerHandler)

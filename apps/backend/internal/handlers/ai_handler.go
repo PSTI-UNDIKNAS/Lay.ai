@@ -19,12 +19,9 @@ func NewAIHandler(svc *services.AIService) *AIHandler {
 
 // IngestRequest captures PDF ingestion parameters.
 type IngestRequest struct {
-	FileName       string `json:"fileName"`       // PDF file name at repo root
-	DocumentID     string `json:"documentId"`     // optional: persist under this document id
-	CourseID       string `json:"courseId"`       // optional
-	LearningUnitID string `json:"learningUnitId"` // optional
-	ChunkSize      int    `json:"chunkSize"`
-	ChunkOverlap   int    `json:"chunkOverlap"`
+	OriginalFileName string `json:"originalFileName" binding:"required"`
+	NewFileName      string `json:"newFileName" binding:"required"`
+	LearningUnitID   string `json:"learningUnitId" binding:"required"`
 }
 
 // IngestResponse returns chunk contents and their embedding size.
@@ -42,17 +39,8 @@ func (h *AIHandler) IngestPDFHandler(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request body", "details": err.Error()})
 		return
 	}
-	if req.FileName == "" {
-		req.FileName = "document.pdf"
-	}
 
-	chunks, err := h.svc.IngestPDF(c.Request.Context(), req.FileName, services.IngestOptions{
-		DocumentID:     req.DocumentID,
-		CourseID:       req.CourseID,
-		LearningUnitID: req.LearningUnitID,
-		ChunkSize:      req.ChunkSize,
-		ChunkOverlap:   req.ChunkOverlap,
-	})
+	chunks, err := h.svc.IngestPDF(c.Request.Context(), req.OriginalFileName, req.NewFileName, req.LearningUnitID)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
@@ -65,6 +53,37 @@ func (h *AIHandler) IngestPDFHandler(c *gin.Context) {
 		}{Content: ch.Content, EmbeddingSize: len(ch.Embedding)})
 	}
 	c.JSON(http.StatusOK, resp)
+}
+
+// GenerateUploadURLRequest captures the name of the file to be uploaded.
+type GenerateUploadURLRequest struct {
+	FileName string `json:"fileName" binding:"required"`
+}
+
+// GenerateUploadURLResponse returns the presigned URL and the new unique filename for upload.
+type GenerateUploadURLResponse struct {
+	UploadURL    string `json:"uploadUrl"`
+	NewFileName  string `json:"newFileName"`
+}
+
+// GenerateUploadURLHandler creates a presigned URL for direct client-side uploads to R2.
+func (h *AIHandler) GenerateUploadURLHandler(c *gin.Context) {
+	var req GenerateUploadURLRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request body", "details": err.Error()})
+		return
+	}
+
+	uploadURL, newFileName, err := h.svc.GeneratePresignedUploadURL(c.Request.Context(), req.FileName)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, GenerateUploadURLResponse{
+		UploadURL:   uploadURL,
+		NewFileName: newFileName,
+	})
 }
 
 // SearchRequest captures query for similarity search.
