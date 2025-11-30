@@ -2,6 +2,7 @@ package store
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"strings"
 	"time"
@@ -210,8 +211,8 @@ func (s *QuizStore) DeleteQuiz(quizID string) error {
 // CreateFlashcardSet saves a new flashcard set to the database
 func (s *QuizStore) CreateFlashcardSet(flashcardSet *models.FlashcardSet) (*models.FlashcardSet, error) {
 	query := `
-		INSERT INTO flashcard_sets (learning_unit_id, title, created_at, updated_at)
-		VALUES ($1, $2, $3, $4)
+		INSERT INTO flashcard_sets (learning_unit_id, title, flashcards_data, created_at, updated_at)
+		VALUES ($1, $2, $3, $4, $5)
 		RETURNING id, created_at, updated_at
 	`
 
@@ -219,11 +220,16 @@ func (s *QuizStore) CreateFlashcardSet(flashcardSet *models.FlashcardSet) (*mode
 	flashcardSet.CreatedAt = now
 	flashcardSet.UpdatedAt = now
 
+	if flashcardSet.FlashcardsData == nil {
+		flashcardSet.FlashcardsData = []byte("[]")
+	}
+
 	row := s.db.QueryRow(
 		context.Background(),
 		query,
 		flashcardSet.LearningUnitID,
 		flashcardSet.Title,
+		flashcardSet.FlashcardsData,
 		flashcardSet.CreatedAt,
 		flashcardSet.UpdatedAt,
 	)
@@ -239,7 +245,7 @@ func (s *QuizStore) CreateFlashcardSet(flashcardSet *models.FlashcardSet) (*mode
 // GetFlashcardSetByID retrieves a flashcard set by its ID
 func (s *QuizStore) GetFlashcardSetByID(setID string) (*models.FlashcardSet, error) {
 	query := `
-		SELECT id, learning_unit_id, title, created_at, updated_at
+		SELECT id, learning_unit_id, title, flashcards_data, created_at, updated_at
 		FROM flashcard_sets
 		WHERE id = $1
 	`
@@ -251,6 +257,7 @@ func (s *QuizStore) GetFlashcardSetByID(setID string) (*models.FlashcardSet, err
 		&flashcardSet.ID,
 		&flashcardSet.LearningUnitID,
 		&flashcardSet.Title,
+		&flashcardSet.FlashcardsData,
 		&flashcardSet.CreatedAt,
 		&flashcardSet.UpdatedAt,
 	)
@@ -265,67 +272,85 @@ func (s *QuizStore) GetFlashcardSetByID(setID string) (*models.FlashcardSet, err
 	return &flashcardSet, nil
 }
 
-// CreateFlashcard saves a new flashcard to the database
-func (s *QuizStore) CreateFlashcard(flashcard *models.Flashcard) (*models.Flashcard, error) {
-	query := `
-		INSERT INTO flashcards (set_id, front_text, back_text, created_at, updated_at)
-		VALUES ($1, $2, $3, $4, $5)
-		RETURNING id, created_at, updated_at
-	`
 
-	now := time.Now()
-	flashcard.CreatedAt = now
-	flashcard.UpdatedAt = now
 
-	row := s.db.QueryRow(
-		context.Background(),
-		query,
-		flashcard.SetID,
-		flashcard.FrontText,
-		flashcard.BackText,
-		flashcard.CreatedAt,
-		flashcard.UpdatedAt,
+// UpdateFlashcardSet updates a flashcard set in the database
+func (s *QuizStore) UpdateFlashcardSet(setID string, updates map[string]interface{}) (*models.FlashcardSet, error) {
+	if len(updates) == 0 {
+		return s.GetFlashcardSetByID(setID)
+	}
+
+	var setParts []string
+	var args []interface{}
+	argIndex := 1
+
+	for field, value := range updates {
+		setParts = append(setParts, fmt.Sprintf("%s = $%d", field, argIndex))
+		args = append(args, value)
+		argIndex++
+	}
+
+	// Always update the updated_at timestamp
+	setParts = append(setParts, fmt.Sprintf("updated_at = $%d", argIndex))
+	args = append(args, time.Now())
+	argIndex++
+
+	// Add the set ID for the WHERE clause
+	args = append(args, setID)
+
+	query := fmt.Sprintf(`
+		UPDATE flashcard_sets
+		SET %s
+		WHERE id = $%d
+		RETURNING id, learning_unit_id, title, flashcards_data, created_at, updated_at
+	`, strings.Join(setParts, ", "), argIndex)
+
+	var flashcardSet models.FlashcardSet
+	row := s.db.QueryRow(context.Background(), query, args...)
+
+	err := row.Scan(
+		&flashcardSet.ID,
+		&flashcardSet.LearningUnitID,
+		&flashcardSet.Title,
+		&flashcardSet.FlashcardsData,
+		&flashcardSet.CreatedAt,
+		&flashcardSet.UpdatedAt,
 	)
 
-	err := row.Scan(&flashcard.ID, &flashcard.CreatedAt, &flashcard.UpdatedAt)
 	if err != nil {
-		return nil, fmt.Errorf("failed to create flashcard: %w", err)
+		if err == pgx.ErrNoRows {
+			return nil, fmt.Errorf("flashcard set not found")
+		}
+		return nil, fmt.Errorf("failed to update flashcard set: %w", err)
 	}
 
-	return flashcard, nil
+	return &flashcardSet, nil
 }
 
-// GetFlashcardsBySetID retrieves flashcards for a specific set
-func (s *QuizStore) GetFlashcardsBySetID(setID string) ([]*models.Flashcard, error) {
+// AddFlashcardToSet adds a new flashcard to the flashcard set's JSONB data atomically
+func (s *QuizStore) AddFlashcardToSet(setID string, flashcard *models.Flashcard) error {
+	cardJSON, err := json.Marshal(flashcard)
+	if err != nil {
+		return fmt.Errorf("failed to marshal flashcard: %w", err)
+	}
+
+	// Wrap in array for concatenation
+	cardArrayJSON := fmt.Sprintf("[%s]", string(cardJSON))
+
 	query := `
-		SELECT id, set_id, front_text, back_text, created_at, updated_at
-		FROM flashcards
-		WHERE set_id = $1
-		ORDER BY created_at ASC
+		UPDATE flashcard_sets 
+		SET flashcards_data = flashcards_data || $1::jsonb, updated_at = $3
+		WHERE id = $2
 	`
 
-	rows, err := s.db.Query(context.Background(), query, setID)
+	result, err := s.db.Exec(context.Background(), query, cardArrayJSON, setID, time.Now())
 	if err != nil {
-		return nil, fmt.Errorf("failed to get flashcards: %w", err)
-	}
-	defer rows.Close()
-
-	var flashcards []*models.Flashcard
-	for rows.Next() {
-		var flashcard models.Flashcard
-		err := rows.Scan(
-			&flashcard.ID,
-			&flashcard.SetID,
-			&flashcard.FrontText,
-			&flashcard.BackText,
-			&flashcard.CreatedAt,
-			&flashcard.UpdatedAt,
-		)
-		if err != nil {
-			return nil, fmt.Errorf("failed to scan flashcard: %w", err)
-		}
-		flashcards = append(flashcards, &flashcard)
+		return fmt.Errorf("failed to add flashcard to set: %w", err)
 	}
 
-	return flashcards, nil
+	if result.RowsAffected() == 0 {
+		return fmt.Errorf("flashcard set not found")
+	}
+
+	return nil
 }

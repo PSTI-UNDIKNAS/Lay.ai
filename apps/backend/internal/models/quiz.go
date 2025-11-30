@@ -62,21 +62,22 @@ type GetQuizzesResponse struct {
 
 // FlashcardSet represents a flashcard set in the system
 type FlashcardSet struct {
-	ID               uuid.UUID `json:"id" db:"id"`
-	LearningUnitID   uuid.UUID `json:"learning_unit_id" db:"learning_unit_id"`
-	Title            string    `json:"title" db:"title"`
-	CreatedAt        time.Time `json:"created_at" db:"created_at"`
-	UpdatedAt        time.Time `json:"updated_at" db:"updated_at"`
+	ID             uuid.UUID       `json:"id" db:"id"`
+	LearningUnitID uuid.UUID       `json:"learning_unit_id" db:"learning_unit_id"`
+	Title          string          `json:"title" db:"title"`
+	FlashcardsData json.RawMessage `json:"flashcards_data" db:"flashcards_data"`
+	CreatedAt      time.Time       `json:"created_at" db:"created_at"`
+	UpdatedAt      time.Time       `json:"updated_at" db:"updated_at"`
 }
 
 // Flashcard represents a flashcard in the system
 type Flashcard struct {
-	ID        uuid.UUID `json:"id" db:"id"`
-	SetID     uuid.UUID `json:"set_id" db:"set_id"`
-	FrontText string    `json:"front_text" db:"front_text"`
-	BackText  string    `json:"back_text" db:"back_text"`
-	CreatedAt time.Time `json:"created_at" db:"created_at"`
-	UpdatedAt time.Time `json:"updated_at" db:"updated_at"`
+	ID        uuid.UUID `json:"id"`
+	SetID     uuid.UUID `json:"set_id,omitempty"` // Optional in JSONB as it's redundant
+	FrontText string    `json:"front_text"`
+	BackText  string    `json:"back_text"`
+	CreatedAt time.Time `json:"created_at"`
+	UpdatedAt time.Time `json:"updated_at"`
 }
 
 // CreateFlashcardSetRequest represents the request payload for creating a flashcard set

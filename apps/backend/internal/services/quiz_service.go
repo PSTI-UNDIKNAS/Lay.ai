@@ -3,6 +3,7 @@ package services
 import (
 	"encoding/json"
 	"fmt"
+	"time"
 
 	"github.com/google/uuid"
 	"lay.ai/backend/internal/models"
@@ -145,14 +146,23 @@ func (s *QuizService) CreateFlashcard(setID, frontText, backText string) (*model
 	}
 
 	// Create flashcard object
+	now := time.Now()
 	flashcard := &models.Flashcard{
+		ID:        uuid.New(),
 		SetID:     uuid.MustParse(setID),
 		FrontText: frontText,
 		BackText:  backText,
+		CreatedAt: now,
+		UpdatedAt: now,
 	}
 
 	// Save to database
-	return s.quizStore.CreateFlashcard(flashcard)
+	err := s.quizStore.AddFlashcardToSet(setID, flashcard)
+	if err != nil {
+		return nil, err
+	}
+
+	return flashcard, nil
 }
 
 // GetFlashcardsBySetID retrieves flashcards for a specific set
@@ -161,5 +171,21 @@ func (s *QuizService) GetFlashcardsBySetID(setID string) ([]*models.Flashcard, e
 		return nil, fmt.Errorf("flashcard set ID is required")
 	}
 
-	return s.quizStore.GetFlashcardsBySetID(setID)
+	set, err := s.quizStore.GetFlashcardSetByID(setID)
+	if err != nil {
+		return nil, err
+	}
+
+	var flashcards []*models.Flashcard
+	if len(set.FlashcardsData) > 0 && string(set.FlashcardsData) != "null" {
+		if err := json.Unmarshal(set.FlashcardsData, &flashcards); err != nil {
+			return nil, fmt.Errorf("failed to unmarshal flashcards: %w", err)
+		}
+	}
+
+	if flashcards == nil {
+		flashcards = []*models.Flashcard{}
+	}
+
+	return flashcards, nil
 }
