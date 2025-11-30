@@ -28,6 +28,7 @@ func SetupRoutes(db *pgxpool.Pool) *gin.Engine {
 	submissionStore := store.NewSubmissionStore(db)
 	enrollmentStore := store.NewEnrollmentStore(db)
 	aiStore := store.NewAIStore(db)
+	generatedContentStore := store.NewGeneratedContentStore(db)
 	documentStore := store.NewDocumentStore(db)
 
 	// Initialize services
@@ -40,7 +41,7 @@ func SetupRoutes(db *pgxpool.Pool) *gin.Engine {
 	submissionService := services.NewSubmissionService(submissionStore)
 	enrollmentService := services.NewEnrollmentService(enrollmentStore, courseStore)
 	documentService := services.NewDocumentService(documentStore)
-	aiService := services.NewAIService(aiStore, documentService)
+	aiService := services.NewAIService(aiStore, generatedContentStore, documentService)
 
 	// Initialize handlers
 	authHandler := handlers.NewAuthHandler(authService)
@@ -63,6 +64,7 @@ func SetupRoutes(db *pgxpool.Pool) *gin.Engine {
 	)
 	enrollmentHandler := handlers.NewEnrollmentHandler(enrollmentService)
 	aiHandler := handlers.NewAIHandler(aiService)
+	quizHandler := handlers.NewQuizHandler(aiService, learningUnitService, courseService)
 
 	// API routes
 	v1 := router.Group("/api")
@@ -124,6 +126,7 @@ func SetupRoutes(db *pgxpool.Pool) *gin.Engine {
 		{
 			courses.GET("/", courseHandler.GetCourses)
 			courses.GET("/:courseId", courseHandler.GetCourseByID)
+			courses.POST("/:courseId/quiz/generate", middleware.AuthWithStatusMiddleware(authService), quizHandler.GenerateQuiz)
 
 			courses.GET("/me", middleware.AuthWithStatusMiddleware(authService), middleware.LecturerOnlyMiddleware(authService), courseHandler.GetMyCourses)
 			courses.POST("/", middleware.AuthWithStatusMiddleware(authService), middleware.LecturerOnlyMiddleware(authService), courseHandler.CreateCourse)

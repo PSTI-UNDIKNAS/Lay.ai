@@ -20,6 +20,14 @@ migrate-down:
 	-path /migrations -database "${DATABASE_URL}" \
 	down 1
 
+## migrate-force: forces the database to a specific version (fix dirty state)
+# Example Usage: make migrate-force version=1
+migrate-force:
+	@echo "Forcing database migration version to ${version}..."
+	docker run --rm --network layaiai_default -v "$(CURDIR)/migrations:/migrations" migrate/migrate \
+	-path /migrations -database "${DATABASE_URL}" \
+	force ${version}
+
 ## migrate-new: creates a new set of versioned migration files
 # Example Usage: make migrate-new name=create_courses_table
 migrate-new:
