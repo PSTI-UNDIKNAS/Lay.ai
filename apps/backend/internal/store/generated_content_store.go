@@ -88,3 +88,73 @@ func (s *GeneratedContentStore) GetGeneratedQuizzesByUserID(ctx context.Context,
 	}
 	return quizzes, nil
 }
+
+// CreateGeneratedFlashcardSet creates a new generated flashcard set record
+func (s *GeneratedContentStore) CreateGeneratedFlashcardSet(ctx context.Context, set *models.GeneratedFlashcardSet) error {
+	query := `
+		INSERT INTO generated_flashcard_sets (id, user_id, course_id, title, flashcards_data, source_unit_ids, created_at, updated_at)
+		VALUES ($1, $2, $3, $4, $5, $6, NOW(), NOW())
+		RETURNING created_at, updated_at
+	`
+	if set.ID == uuid.Nil {
+		set.ID = uuid.New()
+	}
+
+	return s.db.QueryRow(ctx, query,
+		set.ID,
+		set.UserID,
+		set.CourseID,
+		set.Title,
+		set.FlashcardsData,
+		set.SourceUnitIDs,
+	).Scan(&set.CreatedAt, &set.UpdatedAt)
+}
+
+// GetGeneratedFlashcardSetByID retrieves a generated flashcard set by ID
+func (s *GeneratedContentStore) GetGeneratedFlashcardSetByID(ctx context.Context, id uuid.UUID) (*models.GeneratedFlashcardSet, error) {
+	query := `
+		SELECT id, user_id, course_id, title, flashcards_data, source_unit_ids, created_at, updated_at
+		FROM generated_flashcard_sets
+		WHERE id = $1
+	`
+	var set models.GeneratedFlashcardSet
+	err := s.db.QueryRow(ctx, query, id).Scan(
+		&set.ID,
+		&set.UserID,
+		&set.CourseID,
+		&set.Title,
+		&set.FlashcardsData,
+		&set.SourceUnitIDs,
+		&set.CreatedAt,
+		&set.UpdatedAt,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get generated flashcard set: %w", err)
+	}
+	return &set, nil
+}
+
+// GetGeneratedFlashcardSetsByUserID retrieves all generated flashcard sets for a user
+func (s *GeneratedContentStore) GetGeneratedFlashcardSetsByUserID(ctx context.Context, userID uuid.UUID) ([]models.GeneratedFlashcardSet, error) {
+	query := `
+		SELECT id, user_id, course_id, title, flashcards_data, source_unit_ids, created_at, updated_at
+		FROM generated_flashcard_sets
+		WHERE user_id = $1
+		ORDER BY created_at DESC
+	`
+	rows, err := s.db.Query(ctx, query, userID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query generated flashcard sets: %w", err)
+	}
+	defer rows.Close()
+
+	var sets []models.GeneratedFlashcardSet
+	for rows.Next() {
+		var s models.GeneratedFlashcardSet
+		if err := rows.Scan(&s.ID, &s.UserID, &s.CourseID, &s.Title, &s.FlashcardsData, &s.SourceUnitIDs, &s.CreatedAt, &s.UpdatedAt); err != nil {
+			return nil, fmt.Errorf("failed to scan generated flashcard set: %w", err)
+		}
+		sets = append(sets, s)
+	}
+	return sets, nil
+}

@@ -89,6 +89,14 @@ func EnrollmentRequiredMiddleware(enrollmentService interface {
 		// Check if student is enrolled in the course
 		enrollment, err := enrollmentService.GetEnrollmentByStudentAndCourse(userIDStr, courseID)
 		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{
+				"error": "Failed to verify enrollment",
+			})
+			c.Abort()
+			return
+		}
+
+		if enrollment == nil {
 			c.JSON(http.StatusForbidden, gin.H{
 				"error": "You must be enrolled in this course to access this resource",
 			})
