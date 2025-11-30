@@ -62,8 +62,8 @@ type GenerateUploadURLRequest struct {
 
 // GenerateUploadURLResponse returns the presigned URL and the new unique filename for upload.
 type GenerateUploadURLResponse struct {
-	UploadURL    string `json:"uploadUrl"`
-	NewFileName  string `json:"newFileName"`
+	UploadURL   string `json:"uploadUrl"`
+	NewFileName string `json:"newFileName"`
 }
 
 // GenerateUploadURLHandler creates a presigned URL for direct client-side uploads to R2.
@@ -110,6 +110,7 @@ func (h *AIHandler) SearchSimilarHandler(c *gin.Context) {
 // AnswerRequest defines the body for /ai/answer.
 type AnswerRequest struct {
 	Query      string  `json:"query" binding:"required"`
+	Lens       string  `json:"lens,omitempty"`        // optional lens
 	TopK       *int    `json:"top_k,omitempty"`       // default 5
 	DocumentID *string `json:"document_id,omitempty"` // optional filter
 }
@@ -144,7 +145,7 @@ func (h *AIHandler) AnswerHandler(c *gin.Context) {
 	}
 
 	ctx := c.Request.Context()
-	answer, sources, err := h.svc.AnswerQuery(ctx, req.Query, topK, docIDPtr)
+	answer, sources, err := h.svc.AnswerQuery(ctx, req.Query, req.Lens, topK, docIDPtr)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return

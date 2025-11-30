@@ -32,6 +32,13 @@ const embeddingModel = "gemini-embedding-001"
 const generativeModel = "gemini-2.5-flash"
 const presignedURLExpiry = 15 * time.Minute
 
+var AvailableLenses = map[string]string{
+	"feynman":      "Jelaskan dengan analogi sederhana dan intuitif seperti Richard Feynman. Hindari jargon rumit.",
+	"practitioner": "Fokus pada penerapan praktis, langkah-langkah implementasi, dan studi kasus dunia nyata.",
+	"academic":     "Gunakan nada akademis formal, definisikan istilah dengan presisi, dan fokus pada teori fundamental.",
+	"default":      "Jawab dengan jelas, membantu, dan langsung pada intinya.",
+}
+
 // AIService provides PDF ingestion, chunking, and embeddings generation.
 type AIService struct {
 	store         *store.AIStore
@@ -610,7 +617,7 @@ func (s *AIService) embedTexts(ctx context.Context, texts []string) ([][]float32
 
 // AnswerQuery composes a prompt from top-K retrieved chunks and asks the LLM.
 // Returns the answer text and the sources used (chunks).
-func (s *AIService) AnswerQuery(ctx context.Context, query string, topK int, documentID *uuid.UUID) (string, []store.SimilarChunk, error) {
+func (s *AIService) AnswerQuery(ctx context.Context, query string, lens string, topK int, documentID *uuid.UUID) (string, []store.SimilarChunk, error) {
 	if s.client == nil {
 		return "", nil, fmt.Errorf("genai client not initialized")
 	}
@@ -629,9 +636,17 @@ func (s *AIService) AnswerQuery(ctx context.Context, query string, topK int, doc
 	}
 	contextBlock := b.String()
 
+	// Determine the system instruction based on the lens
+	instruction, ok := AvailableLenses[lens]
+	if !ok || instruction == "" {
+		instruction = AvailableLenses["default"]
+	}
+
 	// Compose the LLM prompt.
 	// Keep it concise and deterministic; ask the model to rely on provided context.
 	prompt := fmt.Sprintf(`You are a helpful assistant.
+%s
+
 Use ONLY the CONTEXT below to answer the USER QUESTION.
 If the context is insufficient, say you do not know.
 
@@ -641,7 +656,7 @@ CONTEXT:
 QUESTION:
 %s
 
-Answer:`, contextBlock, query)
+Answer:`, instruction, contextBlock, query)
 
 	// Choose a fast model for Q&A; adjust if you prefer a different one.
 	const answerModel = "gemini-2.5-flash"
