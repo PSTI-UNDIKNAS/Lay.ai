@@ -68,12 +68,14 @@ if command -v bunx >/dev/null 2>&1; then
     "npm run dev:gateway" \
     "npm run dev:student" \
     "npm run dev:lecturer" \
-    "npm run dev:backend"
+    "npm run dev:backend" \
+    "npm run dev:admin"
 else
   echo "Starting apps with npx concurrently..."
   npx concurrently \
     "npm run dev:gateway" \
     "npm run dev:student" \
     "npm run dev:lecturer" \
-    "npm run dev:backend"
+    "npm run dev:backend" \
+    "npm run dev:admin"
 fi
