@@ -70,8 +70,9 @@ export function LoginForm() {
 
       // Redirect to dashboard (or home for now)
       router.push('/dashboard'); 
-    } catch (err: any) {
-      setError(err.message || 'Something went wrong. Please try again.');
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Something went wrong. Please try again.';
+      setError(msg);
     } finally {
       setIsLoading(false);
     }
@@ -146,13 +147,13 @@ export function LoginForm() {
               onChange={(e) => setFormData({ ...formData, rememberMe: e.target.checked })}
               disabled={isLoading}
             />
-            <label htmlFor="remember-me" className="ml-2 block text-sm text-zinc-900">
+            <label htmlFor="remember-me" className="ml-2 block text-sm text-zinc-700">
               Remember me
             </label>
           </div>
 
           <div className="text-sm">
-            <a href="#" className="font-medium text-zinc-900 hover:text-zinc-700">
+            <a href="#" className="font-medium text-zinc-600 hover:text-zinc-800">
               Forgot your password?
             </a>
           </div>
