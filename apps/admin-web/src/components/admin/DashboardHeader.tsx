@@ -1,5 +1,5 @@
 import { Button } from '@/components/ui/button'
-import { Download, Settings, BarChart3, UserCheck } from 'lucide-react'
+import { Download, Settings, BarChart3 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
 export default function DashboardHeader() {
@@ -20,7 +20,6 @@ export default function DashboardHeader() {
 
       <div className="flex items-center gap-6">
         <TabItem active icon={<BarChart3 className="h-4 w-4" />}>Overview</TabItem>
-        <TabItem icon={<UserCheck className="h-4 w-4" />}>Lecturer Approvals <span className="ml-2 rounded-full bg-zinc-100 px-2 py-0.5 text-xs">8</span></TabItem>
       </div>
     </div>
   )
@@ -31,4 +30,3 @@ function TabItem({ children, icon, active }: { children: React.ReactNode; icon?:
     <div className={cn('flex items-center gap-2 pb-3 text-sm font-medium', active ? 'text-zinc-900 border-b-2 border-zinc-900' : 'text-zinc-600')}>{icon}{children}</div>
   )
 }
-

@@ -36,3 +36,61 @@ export async function login(email: string, password: string): Promise<LoginRespo
 
   return data as LoginResponse;
 }
+
+export interface MeResponse {
+  user: {
+    id: string;
+    name: string;
+    email: string;
+    unique_identifier: string;
+    role: string;
+    status: string;
+  };
+}
+
+function getAuthHeaders(): HeadersInit {
+  const token =
+    typeof window !== 'undefined'
+      ? (localStorage.getItem('token') || sessionStorage.getItem('token'))
+      : null;
+  return token ? { Authorization: `Bearer ${token}` } : {};
+}
+
+export async function getMe(): Promise<MeResponse> {
+  const response = await fetch(`${API_BASE_URL}/auth/me`, {
+    method: 'GET',
+    headers: {
+      Accept: 'application/json',
+      ...getAuthHeaders(),
+    },
+  });
+
+  const data = await response.json().catch(() => ({}));
+
+  if (!response.ok) {
+    // Normalize to a consistent error message expected by UI
+    const msg = data?.error || data?.message;
+    if (response.status === 401) {
+      throw new Error('Invalid or expired token');
+    }
+    throw new Error(msg || 'Failed to validate session');
+  }
+
+  return data as MeResponse;
+}
+
+export async function logout(): Promise<void> {
+  try {
+    const response = await fetch(`${API_BASE_URL}/auth/logout`, {
+      method: 'POST',
+      headers: {
+        Accept: 'application/json',
+        ...getAuthHeaders(),
+      },
+    });
+    // Best-effort: even if server fails, proceed to clear client state
+    await response.json().catch(() => ({}));
+  } catch {
+    // ignore
+  }
+}

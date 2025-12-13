@@ -1,14 +1,46 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Menu } from 'lucide-react'
 import Sidebar from '@/components/admin/Sidebar'
+import { useRouter } from 'next/navigation'
+import { getMe } from '@/lib/auth-api'
 
 export default function AdminShell({ children }: { children: React.ReactNode }) {
   const [open, setOpen] = useState(false)
+  const [authError, setAuthError] = useState<string | null>(null)
+  const router = useRouter()
+
+  useEffect(() => {
+    let mounted = true
+    getMe()
+      .then(() => {
+        if (!mounted) return
+        setAuthError(null)
+      })
+      .catch(() => {
+        if (!mounted) return
+        setAuthError('Invalid or expired token')
+        try {
+          localStorage.removeItem('token')
+          localStorage.removeItem('user')
+          sessionStorage.removeItem('token')
+          sessionStorage.removeItem('user')
+        } catch {}
+        router.replace('/login')
+      })
+    return () => {
+      mounted = false
+    }
+  }, [router])
 
   return (
     <div className="min-h-screen bg-white">
+      {authError && (
+        <div className="sticky top-0 z-40 w-full bg-red-50 text-red-700 border-b border-red-200 px-4 py-2 text-sm">
+          {authError}
+        </div>
+      )}
       <div className="md:hidden sticky top-0 z-30 flex items-center justify-between border-b border-zinc-200 bg-white px-4 py-3">
         <button
           className="inline-flex items-center gap-2 rounded-md border border-zinc-200 px-3 py-2 text-sm font-medium text-zinc-700 hover:bg-zinc-100"

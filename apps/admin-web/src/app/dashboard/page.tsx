@@ -1,10 +1,34 @@
+"use client"
+import { useEffect, useState } from 'react'
 import AdminShell from '@/components/admin/AdminShell'
 import DashboardHeader from '@/components/admin/DashboardHeader'
 import StatCard from '@/components/admin/StatCard'
 import Card from '@/components/admin/Card'
-import { Users, BookOpen, Clock, ShieldCheck, TrendingUp, FileText, Activity, UserCheck, ClipboardList } from 'lucide-react'
+import { Users, BookOpen, Clock, ShieldCheck, TrendingUp, ClipboardList } from 'lucide-react'
+import { fetchDashboardMetrics } from '@/lib/admin-api'
 
 export default function DashboardPage() {
+  const [usersCount, setUsersCount] = useState<number | null>(null)
+  const [coursesCount, setCoursesCount] = useState<number | null>(null)
+  const [pendingLecturers, setPendingLecturers] = useState<number | null>(null)
+  const [healthStatus, setHealthStatus] = useState<string | null>(null)
+
+  useEffect(() => {
+    fetchDashboardMetrics()
+      .then(({ usersCount, coursesCount, pendingLecturers, healthStatus }) => {
+        setUsersCount(usersCount)
+        setCoursesCount(coursesCount)
+        setPendingLecturers(pendingLecturers)
+        setHealthStatus(healthStatus)
+      })
+      .catch(() => {
+        setUsersCount(null)
+        setCoursesCount(null)
+        setPendingLecturers(null)
+        setHealthStatus(null)
+      })
+  }, [])
+
   return (
     <AdminShell>
       <div className="space-y-8">
@@ -13,26 +37,26 @@ export default function DashboardPage() {
         <div className="grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-4">
           <StatCard
             title="Total Users"
-            value={<span>1,247</span>}
-            subtitle={<span className="text-zinc-600">45 lecturers, 1202 students</span>}
+            value={<span>{usersCount ?? '—'}</span>}
+            subtitle={<span className="text-zinc-600">Total users across roles</span>}
             icon={<Users className="h-6 w-6" />}
           />
           <StatCard
             title="Active Courses"
-            value={<span>28</span>}
-            subtitle={<div className="flex items-center gap-2 text-sm text-green-600"><TrendingUp className="h-4 w-4" /> <span>+3 this month</span></div>}
+            value={<span>{coursesCount ?? '—'}</span>}
+            subtitle={<div className="flex items-center gap-2 text-sm text-green-600"><TrendingUp className="h-4 w-4" /> <span>Currently available</span></div>}
             icon={<BookOpen className="h-6 w-6" />}
           />
           <StatCard
             title="Pending Lecturers"
-            value={<span className="text-orange-600">8</span>}
+            value={<span className="text-orange-600">{pendingLecturers ?? '—'}</span>}
             subtitle={<span className="text-orange-600">Requires approval</span>}
             icon={<Clock className="h-6 w-6 text-orange-600" />}
           />
           <StatCard
             title="System Health"
-            value={<span>99.9%</span>}
-            subtitle={<span className="text-green-600">Uptime</span>}
+            value={<span>{healthStatus ?? '—'}</span>}
+            subtitle={<span className="text-green-600">Status</span>}
             icon={<ShieldCheck className="h-6 w-6" />}
           />
         </div>
@@ -57,9 +81,6 @@ export default function DashboardPage() {
 
           <Card title="Quick Actions">
             <div className="space-y-3">
-              <button className="flex w-full items-center justify-between rounded-lg border border-zinc-200 bg-white px-4 py-3 text-left text-sm font-medium text-zinc-900 hover:bg-zinc-100">
-                <span className="flex items-center gap-2"><UserCheck className="h-4 w-4" /> Review Lecturer Applications</span>
-              </button>
               <button className="flex w-full items-center justify-between rounded-lg border border-zinc-200 bg-white px-4 py-3 text-left text-sm font-medium text-zinc-900 hover:bg-zinc-100">
                 <span className="flex items-center gap-2"><ClipboardList className="h-4 w-4" /> Process Enrollments</span>
               </button>
