@@ -80,6 +80,19 @@ export async function getPendingLecturers(): Promise<PendingLecturer[]> {
   }
 }
 
+export async function approveLecturer(lecturerId: string): Promise<boolean> {
+  const res = await fetch(`${API_BASE_URL}/admin/lecturers/${lecturerId}/approve`, {
+    method: 'POST',
+    headers: { Accept: 'application/json', ...getAuthHeaders() },
+  })
+  const d = await res.json().catch(() => ({}))
+  if (!res.ok) {
+    const msg = d?.error || d?.message || 'Failed to approve lecturer'
+    throw new Error(msg)
+  }
+  return d?.success === true || typeof d?.message === 'string'
+}
+
 export type AdminUserRole = 'student' | 'lecturer' | 'admin'
 export type AdminUserStatus = 'active' | 'pending_approval' | 'inactive'
 export type AdminUser = {
@@ -113,6 +126,75 @@ export async function getUsers(params?: {
     throw new Error(msg)
   }
   return Array.isArray(d.users) ? d.users : []
+}
+
+export type CreateUserRequest = {
+  name: string
+  email: string
+  unique_identifier: string
+  password: string
+  role: AdminUserRole
+  status: AdminUserStatus
+}
+
+export async function createUser(req: CreateUserRequest): Promise<AdminUser> {
+  const res = await fetch(`${API_BASE_URL}/admin/users`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Accept: 'application/json', ...getAuthHeaders() },
+    body: JSON.stringify(req),
+  })
+  const d = await res.json().catch(() => ({}))
+  if (!res.ok) {
+    const msg = d?.error || d?.message || 'Failed to create user'
+    throw new Error(msg)
+  }
+  return d.user as AdminUser
+}
+
+export type UpdateUserRequest = {
+  name?: string
+  email?: string
+  unique_identifier?: string
+  role?: AdminUserRole
+  status?: AdminUserStatus
+}
+
+export async function updateUser(userId: string, updates: UpdateUserRequest): Promise<AdminUser> {
+  const res = await fetch(`${API_BASE_URL}/admin/users/${userId}`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json', Accept: 'application/json', ...getAuthHeaders() },
+    body: JSON.stringify(updates),
+  })
+  const d = await res.json().catch(() => ({}))
+  if (!res.ok) {
+    const msg = d?.error || d?.message || 'Failed to update user'
+    throw new Error(msg)
+  }
+  return d.user as AdminUser
+}
+
+export async function deleteUser(userId: string): Promise<void> {
+  const res = await fetch(`${API_BASE_URL}/admin/users/${userId}`, {
+    method: 'DELETE',
+    headers: { Accept: 'application/json', ...getAuthHeaders() },
+  })
+  const d = await res.json().catch(() => ({}))
+  if (!res.ok) {
+    const msg = d?.error || d?.message || 'Failed to delete user'
+    throw new Error(msg)
+  }
+}
+
+export async function getUserById(userId: string): Promise<AdminUser> {
+  const res = await fetch(`${API_BASE_URL}/admin/users/${userId}`, {
+    headers: { Accept: 'application/json', ...getAuthHeaders() },
+  })
+  const d = await res.json().catch(() => ({}))
+  if (!res.ok) {
+    const msg = d?.error || d?.message || 'Failed to fetch user'
+    throw new Error(msg)
+  }
+  return d as AdminUser
 }
 
 export async function getSystemHealthStatus(): Promise<string | null> {
