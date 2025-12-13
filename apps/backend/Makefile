@@ -6,17 +6,21 @@ export
 
 .DEFAULT_GOAL := help
 
+# Compose project and default network (fallback to folder name)
+PROJECT_NAME := $(if $(COMPOSE_PROJECT_NAME),$(COMPOSE_PROJECT_NAME),$(shell basename $(abspath ../..)))
+DEFAULT_NETWORK := $(PROJECT_NAME)_default
+
 ## migrate-up: applies all new 'up' migrations
 migrate-up:
 	@echo "Running database migrations up..."
-	docker run --rm --network layaiai_default -v "$(CURDIR)/migrations:/migrations" migrate/migrate \
+	docker run --rm --network $(DEFAULT_NETWORK) -v "$(CURDIR)/migrations:/migrations" migrate/migrate \
 	-path /migrations -database "${DATABASE_URL}" \
 	up
 
 ## migrate-down: reverts the very last 'up' migration
 migrate-down:
 	@echo "Reverting last database migration..."
-	docker run --rm --network layaiai_default -v "$(CURDIR)/migrations:/migrations" migrate/migrate \
+	docker run --rm --network $(DEFAULT_NETWORK) -v "$(CURDIR)/migrations:/migrations" migrate/migrate \
 	-path /migrations -database "${DATABASE_URL}" \
 	down 1
 
@@ -24,7 +28,7 @@ migrate-down:
 # Example Usage: make migrate-force version=1
 migrate-force:
 	@echo "Forcing database migration version to ${version}..."
-	docker run --rm --network layaiai_default -v "$(CURDIR)/migrations:/migrations" migrate/migrate \
+	docker run --rm --network $(DEFAULT_NETWORK) -v "$(CURDIR)/migrations:/migrations" migrate/migrate \
 	-path /migrations -database "${DATABASE_URL}" \
 	force ${version}
 
