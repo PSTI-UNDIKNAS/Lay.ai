@@ -1,22 +1,41 @@
+"use client"
+
+import { useEffect, useState } from 'react'
 import AdminShell from '@/components/admin/AdminShell'
 import Card from '@/components/admin/Card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { CircleUser, Pencil, Trash2, MoreVertical } from 'lucide-react'
+import { getUsers, type AdminUser } from '@/lib/admin-api'
 
-const lecturers = [
-  { name: 'Dr. Sarah Johnson', email: 'sarah.johnson@university.edu', students: 45, joinDate: '15/09/2023', status: 'active' as const },
-  { name: 'Prof. Michael Chen', email: 'michael.chen@university.edu', students: 38, joinDate: '20/08/2023', status: 'active' as const },
-  { name: 'Dr. Emily Rodriguez', email: 'emily.rodriguez@university.edu', students: 52, joinDate: '01/10/2023', status: 'active' as const },
-  { name: 'Dr. James Wilson', email: 'james.wilson@university.edu', students: 29, joinDate: '10/07/2023', status: 'inactive' as const },
-]
-
-function StatusBadge({ status }: { status: 'active' | 'inactive' }) {
-  const styles = status === 'active' ? 'bg-green-50 text-green-700 border border-green-200' : 'bg-red-50 text-red-700 border border-red-200'
+function StatusBadge({ status }: { status: 'active' | 'inactive' | 'pending_approval' }) {
+  const styles =
+    status === 'active'
+      ? 'bg-green-50 text-green-700 border border-green-200'
+      : status === 'inactive'
+      ? 'bg-red-50 text-red-700 border border-red-200'
+      : 'bg-orange-50 text-orange-700 border border-orange-200'
   return <span className={`rounded-full px-3 py-1 text-xs font-medium ${styles}`}>{status}</span>
 }
 
 export default function ManageLecturerPage() {
+  const [lecturers, setLecturers] = useState<AdminUser[]>([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+
+  useEffect(() => {
+    getUsers({ role: 'lecturer', limit: 50 })
+      .then((users) => {
+        setLecturers(users)
+        setError(null)
+      })
+      .catch((e) => {
+        const msg = e instanceof Error ? e.message : 'Failed to load lecturers'
+        setError(msg)
+      })
+      .finally(() => setLoading(false))
+  }, [])
+
   return (
     <AdminShell>
       <div className="space-y-6">
@@ -56,8 +75,23 @@ export default function ManageLecturerPage() {
                 </tr>
               </thead>
               <tbody>
-                {lecturers.map((row) => (
-                  <tr key={row.email} className="border-b border-zinc-100">
+                {loading && (
+                  <tr>
+                    <td className="px-4 py-6 text-sm text-zinc-600" colSpan={5}>Loading lecturers…</td>
+                  </tr>
+                )}
+                {error && !loading && (
+                  <tr>
+                    <td className="px-4 py-6 text-sm text-red-700" colSpan={5}>{error}</td>
+                  </tr>
+                )}
+                {!loading && !error && lecturers.length === 0 && (
+                  <tr>
+                    <td className="px-4 py-6 text-sm text-zinc-600" colSpan={5}>No lecturers found</td>
+                  </tr>
+                )}
+                {!loading && !error && lecturers.map((row) => (
+                  <tr key={row.id} className="border-b border-zinc-100">
                     <td className="px-4 py-4">
                       <div className="flex items-center gap-3">
                         <div className="flex h-9 w-9 items-center justify-center rounded-full bg-zinc-100 text-zinc-600">
@@ -70,10 +104,10 @@ export default function ManageLecturerPage() {
                       </div>
                     </td>
                     <td className="px-4 py-4">
-                      <div className="text-sm text-zinc-900">{row.students}</div>
+                      <div className="text-sm text-zinc-900">—</div>
                     </td>
                     <td className="px-4 py-4">
-                      <div className="text-sm text-zinc-900">{row.joinDate}</div>
+                      <div className="text-sm text-zinc-900">{new Date(row.created_at).toLocaleDateString()}</div>
                     </td>
                     <td className="px-4 py-4">
                       <StatusBadge status={row.status} />

@@ -56,6 +56,65 @@ export async function getPendingLecturersCount(): Promise<number | null> {
   }
 }
 
+export type PendingLecturer = {
+  id: string;
+  name: string;
+  email: string;
+  unique_identifier: string;
+  created_at: string;
+};
+
+export async function getPendingLecturers(): Promise<PendingLecturer[]> {
+  try {
+    const res = await fetch(`${API_BASE_URL}/admin/lecturers?status=pending_approval`, {
+      headers: { Accept: 'application/json', ...getAuthHeaders() },
+    });
+    const d = await res.json();
+    if (!res.ok) {
+      const msg = d?.error || d?.message || 'Failed to fetch pending lecturers';
+      throw new Error(msg);
+    }
+    return Array.isArray(d.lecturers) ? d.lecturers : [];
+  } catch {
+    return [];
+  }
+}
+
+export type AdminUserRole = 'student' | 'lecturer' | 'admin'
+export type AdminUserStatus = 'active' | 'pending_approval' | 'inactive'
+export type AdminUser = {
+  id: string
+  name: string
+  email: string
+  unique_identifier: string
+  role: AdminUserRole
+  status: AdminUserStatus
+  created_at: string
+  updated_at: string
+}
+
+export async function getUsers(params?: {
+  role?: AdminUserRole
+  status?: AdminUserStatus
+  limit?: number
+  offset?: number
+}): Promise<AdminUser[]> {
+  const query = new URLSearchParams()
+  if (params?.role) query.set('role', params.role)
+  if (params?.status) query.set('status', params.status)
+  if (params?.limit != null) query.set('limit', String(params.limit))
+  if (params?.offset != null) query.set('offset', String(params.offset))
+
+  const url = `${API_BASE_URL}/admin/users${query.toString() ? `?${query.toString()}` : ''}`
+  const res = await fetch(url, { headers: { Accept: 'application/json', ...getAuthHeaders() } })
+  const d = await res.json().catch(() => ({}))
+  if (!res.ok) {
+    const msg = d?.error || d?.message || 'Failed to fetch users'
+    throw new Error(msg)
+  }
+  return Array.isArray(d.users) ? d.users : []
+}
+
 export async function getSystemHealthStatus(): Promise<string | null> {
   try {
     const res = await fetch(`${API_BASE_URL}/health`, {

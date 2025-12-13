@@ -1,24 +1,40 @@
+"use client"
+
+import { useEffect, useState } from 'react'
 import AdminShell from '@/components/admin/AdminShell'
 import Card from '@/components/admin/Card'
 import StatCard from '@/components/admin/StatCard'
 import { Input } from '@/components/ui/input'
 import { GraduationCap, CheckCircle, Clock } from 'lucide-react'
+import { getUsers, type AdminUser } from '@/lib/admin-api'
 
-const students = [
-  { name: 'Alice Johnson', email: 'alice.johnson@email.com', joinDate: '10/01/2024', status: 'active' as const },
-  { name: 'Bob Smith', email: 'bob.smith@email.com', joinDate: '08/01/2024', status: 'active' as const },
-  { name: 'Carol Davis', email: 'carol.davis@email.com', joinDate: '15/12/2023', status: 'active' as const },
-  { name: 'David Wilson', email: 'david.wilson@email.com', joinDate: '05/01/2024', status: 'active' as const },
-  { name: 'Eva Brown', email: 'eva.brown@email.com', joinDate: '12/01/2024', status: 'pending' as const },
-  { name: 'Frank Miller', email: 'frank.miller@email.com', joinDate: '15/01/2024', status: 'active' as const },
-]
-
-function StatusBadge({ status }: { status: 'active' | 'pending' }) {
-  const styles = status === 'active' ? 'bg-green-50 text-green-700 border border-green-200' : 'bg-orange-50 text-orange-700 border border-orange-200'
+function StatusBadge({ status }: { status: 'active' | 'inactive' | 'pending_approval' }) {
+  const styles =
+    status === 'active'
+      ? 'bg-green-50 text-green-700 border border-green-200'
+      : status === 'inactive'
+      ? 'bg-red-50 text-red-700 border border-red-200'
+      : 'bg-orange-50 text-orange-700 border border-orange-200'
   return <span className={`rounded-full px-3 py-1 text-xs font-medium ${styles}`}>{status}</span>
 }
 
 export default function ManageStudentsPage() {
+  const [students, setStudents] = useState<AdminUser[]>([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+
+  useEffect(() => {
+    getUsers({ role: 'student', limit: 50 })
+      .then((users) => {
+        setStudents(users)
+        setError(null)
+      })
+      .catch((e) => {
+        const msg = e instanceof Error ? e.message : 'Failed to load students'
+        setError(msg)
+      })
+      .finally(() => setLoading(false))
+  }, [])
   return (
     <AdminShell>
       <div className="space-y-6">
@@ -28,9 +44,9 @@ export default function ManageStudentsPage() {
         </div>
 
         <div className="grid grid-cols-1 gap-6 md:grid-cols-3">
-          <StatCard title="Total Students" value={<span>8</span>} icon={<GraduationCap className="h-6 w-6" />} />
-          <StatCard title="Active Students" value={<span>6</span>} icon={<CheckCircle className="h-6 w-6 text-green-600" />} />
-          <StatCard title="Pending Approval" value={<span className="text-orange-600">2</span>} icon={<Clock className="h-6 w-6 text-orange-600" />} />
+          <StatCard title="Total Students" value={<span>{students.length}</span>} icon={<GraduationCap className="h-6 w-6" />} />
+          <StatCard title="Active Students" value={<span>{students.filter((s) => s.status === 'active').length}</span>} icon={<CheckCircle className="h-6 w-6 text-green-600" />} />
+          <StatCard title="Pending Approval" value={<span className="text-orange-600">{students.filter((s) => s.status === 'pending_approval').length}</span>} icon={<Clock className="h-6 w-6 text-orange-600" />} />
         </div>
 
         <Card>
@@ -60,16 +76,27 @@ export default function ManageStudentsPage() {
                 </tr>
               </thead>
               <tbody>
-                {students.map((row) => (
-                  <tr key={row.email} className="border-b border-zinc-100">
+                {loading && (
+                  <tr>
+                    <td className="px-4 py-6 text-sm text-zinc-600" colSpan={4}>Loading students…</td>
+                  </tr>
+                )}
+                {error && !loading && (
+                  <tr>
+                    <td className="px-4 py-6 text-sm text-red-700" colSpan={4}>{error}</td>
+                  </tr>
+                )}
+                {!loading && !error && students.length === 0 && (
+                  <tr>
+                    <td className="px-4 py-6 text-sm text-zinc-600" colSpan={4}>No students found</td>
+                  </tr>
+                )}
+                {!loading && !error && students.map((row) => (
+                  <tr key={row.id} className="border-b border-zinc-100">
                     <td className="px-4 py-4">
                       <div className="flex items-center gap-3">
                         <div className="flex h-9 w-9 items-center justify-center rounded-full bg-zinc-100 text-zinc-700 text-xs font-semibold">
-                          {row.name
-                            .split(' ')
-                            .map((n) => n[0])
-                            .slice(0, 2)
-                            .join('')}
+                          {row.name.split(' ').map((n) => n[0]).slice(0, 2).join('')}
                         </div>
                         <div>
                           <div className="text-sm font-medium text-zinc-900">{row.name}</div>
@@ -78,7 +105,7 @@ export default function ManageStudentsPage() {
                       </div>
                     </td>
                     <td className="px-4 py-4">
-                      <div className="text-sm text-zinc-900">{row.joinDate}</div>
+                      <div className="text-sm text-zinc-900">{new Date(row.created_at).toLocaleDateString()}</div>
                     </td>
                     <td className="px-4 py-4">
                       <StatusBadge status={row.status} />

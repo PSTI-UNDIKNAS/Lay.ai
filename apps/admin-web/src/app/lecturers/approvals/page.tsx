@@ -1,51 +1,34 @@
+"use client"
+
+import { useEffect, useState } from 'react'
 import AdminShell from '@/components/admin/AdminShell'
 import Card from '@/components/admin/Card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Search } from 'lucide-react'
+import { getPendingLecturers, type PendingLecturer } from '@/lib/admin-api'
 
-const data = [
-  {
-    name: 'Dr. Sarah Johnson',
-    email: 'sarah.johnson@stanford.edu',
-    department: 'Computer Science',
-    appliedAt: 'Mar 10, 2024, 06:00 PM',
-    status: 'pending' as const,
-  },
-  {
-    name: 'Prof. Michael Chen',
-    email: 'michael.chen@mit.edu',
-    department: 'Electrical Engineering',
-    appliedAt: 'Mar 9, 2024, 11:00 PM',
-    status: 'pending' as const,
-  },
-  {
-    name: 'Dr. Emily Rodriguez',
-    email: 'emily.rodriguez@berkeley.edu',
-    department: 'Mathematics',
-    appliedAt: 'Mar 8, 2024, 08:00 PM',
-    status: 'approved' as const,
-  },
-  {
-    name: 'Dr. James Wilson',
-    email: 'james.wilson@community.edu',
-    department: 'Business',
-    appliedAt: 'Mar 8, 2024, 01:00 AM',
-    status: 'rejected' as const,
-  },
-]
-
-function StatusBadge({ status }: { status: 'pending' | 'approved' | 'rejected' }) {
-  const styles =
-    status === 'approved'
-      ? 'bg-green-50 text-green-700 border border-green-200'
-      : status === 'rejected'
-      ? 'bg-red-50 text-red-700 border border-red-200'
-      : 'bg-orange-50 text-orange-700 border border-orange-200'
-  return <span className={`rounded-full px-3 py-1 text-xs font-medium ${styles}`}>{status}</span>
+function StatusBadge() {
+  return <span className="rounded-full px-3 py-1 text-xs font-medium bg-orange-50 text-orange-700 border border-orange-200">pending</span>
 }
 
 export default function LecturerApprovalsPage() {
+  const [lecturers, setLecturers] = useState<PendingLecturer[]>([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+
+  useEffect(() => {
+    getPendingLecturers()
+      .then((list) => {
+        setLecturers(list)
+        setError(null)
+      })
+      .catch((e) => {
+        const msg = e instanceof Error ? e.message : 'Failed to load applicants'
+        setError(msg)
+      })
+      .finally(() => setLoading(false))
+  }, [])
   return (
     <AdminShell>
       <div className="space-y-6">
@@ -72,15 +55,30 @@ export default function LecturerApprovalsPage() {
               <thead>
                 <tr className="border-b border-zinc-200">
                   <th className="px-4 py-3 text-left text-xs font-semibold text-zinc-600 w-1/4">Applicant</th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold text-zinc-600 w-1/4">Department</th>
+                  <th className="px-4 py-3 text-left text-xs font-semibold text-zinc-600 w-1/4">Unique ID</th>
                   <th className="px-4 py-3 text-left text-xs font-semibold text-zinc-600 w-1/4">Applied Date</th>
                   <th className="px-4 py-3 text-left text-xs font-semibold text-zinc-600 w-24">Status</th>
                   <th className="px-4 py-3 text-left text-xs font-semibold text-zinc-600 w-48">Actions</th>
                 </tr>
               </thead>
               <tbody>
-                {data.map((row) => (
-                  <tr key={row.email} className="border-b border-zinc-100">
+                {loading && (
+                  <tr>
+                    <td className="px-4 py-6 text-sm text-zinc-600" colSpan={5}>Loading applicants…</td>
+                  </tr>
+                )}
+                {error && !loading && (
+                  <tr>
+                    <td className="px-4 py-6 text-sm text-red-700" colSpan={5}>{error}</td>
+                  </tr>
+                )}
+                {!loading && !error && lecturers.length === 0 && (
+                  <tr>
+                    <td className="px-4 py-6 text-sm text-zinc-600" colSpan={5}>No pending lecturer applications</td>
+                  </tr>
+                )}
+                {!loading && !error && lecturers.map((row) => (
+                  <tr key={row.id} className="border-b border-zinc-100">
                     <td className="px-4 py-4">
                       <div className="flex items-center gap-3">
                         <div className="flex h-8 w-8 items-center justify-center rounded-full bg-zinc-100 text-zinc-700 text-sm font-semibold">
@@ -93,18 +91,18 @@ export default function LecturerApprovalsPage() {
                       </div>
                     </td>
                     <td className="px-4 py-4">
-                      <div className="text-sm text-zinc-900">{row.department}</div>
+                      <div className="text-sm text-zinc-900">{row.unique_identifier}</div>
                     </td>
                     <td className="px-4 py-4">
-                      <div className="text-sm text-zinc-900">{row.appliedAt}</div>
+                      <div className="text-sm text-zinc-900">{new Date(row.created_at).toLocaleString()}</div>
                     </td>
                     <td className="px-4 py-4">
-                      <StatusBadge status={row.status} />
+                      <StatusBadge />
                     </td>
                     <td className="px-4 py-4">
                       <div className="flex items-center gap-2">
                         <Button variant="outline" className="border-green-200 text-green-700 hover:bg-green-50">Approve</Button>
-                        <Button variant="outline" className="border-red-200 text-red-700 hover:bg-red-50">Reject</Button>
+                        <Button variant="outline" className="border-red-200 text-red-700 hover:bg-red-50" disabled>Reject</Button>
                       </div>
                     </td>
                   </tr>
