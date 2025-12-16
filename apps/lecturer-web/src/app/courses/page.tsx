@@ -8,7 +8,7 @@ import Card from '@/components/lecturer/Card';
 import { Users, BookOpen, FileText } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { createCourse, getMyCourses, LecturerCourse } from '@/lib/auth-api';
+import { CourseAccessType, createCourse, getMyCourses, LecturerCourse } from '@/lib/auth-api';
 
 export default function MyCoursesPage() {
   const [courses, setCourses] = useState<LecturerCourse[]>([]);
@@ -19,6 +19,8 @@ export default function MyCoursesPage() {
   const [createdMessage, setCreatedMessage] = useState<string | null>(null);
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
+  const [accessType, setAccessType] = useState<CourseAccessType>('public');
+  const [password, setPassword] = useState('');
 
   const stats = useMemo(
     () => ({
@@ -79,14 +81,23 @@ export default function MyCoursesPage() {
 
   async function handleCreateCourse() {
     if (!title.trim()) return;
+    if (!accessType) return;
+    if (accessType === 'password' && !password.trim()) return;
     setCreating(true);
     setError(null);
     setCreatedMessage(null);
     try {
-      const course = await createCourse(title.trim(), description.trim(), 'public');
+      const course = await createCourse(
+        title.trim(),
+        description.trim(),
+        accessType,
+        accessType === 'password' ? password.trim() : undefined,
+      );
       setCourses((prev) => [course, ...prev]);
       setTitle('');
       setDescription('');
+      setAccessType('public');
+      setPassword('');
       setCreatedMessage('Course created successfully.');
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to create course');
@@ -132,9 +143,41 @@ export default function MyCoursesPage() {
                     disabled={creating}
                   />
                 </div>
+                <div className="space-y-2">
+                  <div className="text-xs font-medium uppercase tracking-wide text-zinc-500">Access Type</div>
+                  <select
+                    className="w-full rounded-md border border-zinc-200 px-3 py-2 text-sm text-zinc-900 shadow-sm outline-none ring-zinc-900/5 focus-visible:ring-2"
+                    value={accessType}
+                    onChange={(e) => setAccessType(e.target.value as CourseAccessType)}
+                    disabled={creating}
+                  >
+                    <option value="public">Public (anyone can join)</option>
+                    <option value="password">Password protected</option>
+                    <option value="by_request">Request to join</option>
+                  </select>
+                </div>
+                {accessType === 'password' && (
+                  <div className="space-y-2">
+                    <div className="text-xs font-medium uppercase tracking-wide text-zinc-500">Course Password</div>
+                    <Input
+                      type="password"
+                      value={password}
+                      onChange={(e) => setPassword(e.target.value)}
+                      disabled={creating}
+                    />
+                  </div>
+                )}
                 <div className="flex items-center justify-end gap-2">
                   <Button variant="outline" onClick={() => setCreateOpen(false)} disabled={creating}>Close</Button>
-                  <Button variant="outline" onClick={handleCreateCourse} disabled={creating || !title.trim()}>
+                  <Button
+                    variant="outline"
+                    onClick={handleCreateCourse}
+                    disabled={
+                      creating ||
+                      !title.trim() ||
+                      (accessType === 'password' && !password.trim())
+                    }
+                  >
                     {creating ? 'Creating...' : 'Create'}
                   </Button>
                 </div>

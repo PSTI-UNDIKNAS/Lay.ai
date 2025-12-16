@@ -137,7 +137,17 @@ export async function createCourse(
   title: string,
   description: string,
   accessType: CourseAccessType = 'public',
+  password?: string,
 ): Promise<LecturerCourse> {
+  const body: Record<string, unknown> = {
+    title,
+    description,
+    access_type: accessType,
+  };
+  if (accessType === 'password' && password) {
+    body.password = password;
+  }
+
   const response = await fetch(`${API_BASE_URL}/courses`, {
     method: 'POST',
     headers: {
@@ -145,11 +155,7 @@ export async function createCourse(
       Accept: 'application/json',
       ...getAuthHeaders(),
     },
-    body: JSON.stringify({
-      title,
-      description,
-      access_type: accessType,
-    }),
+    body: JSON.stringify(body),
   });
 
   const data = await response.json().catch(() => ({}));
