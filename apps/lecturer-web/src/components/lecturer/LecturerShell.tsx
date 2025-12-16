@@ -14,8 +14,19 @@ export default function LecturerShell({ children }: { children: React.ReactNode 
   useEffect(() => {
     let mounted = true
     getMe()
-      .then(() => {
+      .then((res) => {
         if (!mounted) return
+        if (res.user.role !== 'lecturer') {
+          setAuthError('Only lecturer accounts can access this area')
+          try {
+            localStorage.removeItem('token')
+            localStorage.removeItem('user')
+            sessionStorage.removeItem('token')
+            sessionStorage.removeItem('user')
+          } catch {}
+          router.replace('/login')
+          return
+        }
         setAuthError(null)
       })
       .catch(() => {
@@ -72,4 +83,3 @@ export default function LecturerShell({ children }: { children: React.ReactNode 
     </div>
   )
 }
-

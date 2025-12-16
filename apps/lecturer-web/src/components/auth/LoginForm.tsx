@@ -57,6 +57,10 @@ export function LoginForm() {
 
     try {
       const response = await login(formData.email, formData.password);
+      if (response.user.role !== 'lecturer') {
+        setError('Only lecturer accounts can sign in here.');
+        return;
+      }
       if (formData.rememberMe) {
         localStorage.setItem('token', response.token);
         localStorage.setItem('user', JSON.stringify(response.user));
@@ -162,4 +166,3 @@ export function LoginForm() {
     </div>
   );
 }
-

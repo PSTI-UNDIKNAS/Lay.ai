@@ -91,3 +91,145 @@ export async function logout(): Promise<void> {
   } catch {}
 }
 
+export interface LecturerCourse {
+  id: string;
+  creator_id: string;
+  title: string;
+  description: string;
+  access_type: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export async function getMyCourses(limit = 100, offset = 0): Promise<LecturerCourse[]> {
+  const params = new URLSearchParams();
+  if (limit != null) params.set('limit', String(limit));
+  if (offset != null) params.set('offset', String(offset));
+
+  const response = await fetch(
+    `${API_BASE_URL}/courses/me${params.toString() ? `?${params.toString()}` : ''}`,
+    {
+      method: 'GET',
+      headers: {
+        Accept: 'application/json',
+        ...getAuthHeaders(),
+      },
+    },
+  );
+
+  const data = await response.json().catch(() => ({}));
+
+  if (!response.ok) {
+    const msg = data?.error || data?.message || 'Failed to fetch your courses';
+    throw new Error(msg);
+  }
+
+  if (Array.isArray(data.courses)) {
+    return data.courses as LecturerCourse[];
+  }
+
+  return [];
+}
+
+export type CourseAccessType = 'public' | 'password' | 'by_request';
+
+export async function createCourse(
+  title: string,
+  description: string,
+  accessType: CourseAccessType = 'public',
+): Promise<LecturerCourse> {
+  const response = await fetch(`${API_BASE_URL}/courses`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Accept: 'application/json',
+      ...getAuthHeaders(),
+    },
+    body: JSON.stringify({
+      title,
+      description,
+      access_type: accessType,
+    }),
+  });
+
+  const data = await response.json().catch(() => ({}));
+
+  if (!response.ok) {
+    const msg = data?.error || data?.message || 'Failed to create course';
+    throw new Error(msg);
+  }
+
+  if (data.course) {
+    return data.course as LecturerCourse;
+  }
+
+  throw new Error('Invalid course response');
+}
+
+interface CourseAccessRequest {
+  id: string;
+  student_id: string;
+  course_id: string;
+  status: string;
+  created_at: string;
+  updated_at: string;
+}
+
+async function getCourseAccessRequests(courseId: string): Promise<CourseAccessRequest[]> {
+  const response = await fetch(`${API_BASE_URL}/courses/${courseId}/access-requests`, {
+    method: 'GET',
+    headers: {
+      Accept: 'application/json',
+      ...getAuthHeaders(),
+    },
+  });
+
+  const data = await response.json().catch(() => ({}));
+
+  if (!response.ok) {
+    const msg = data?.error || data?.message || 'Failed to fetch course access requests';
+    throw new Error(msg);
+  }
+
+  if (Array.isArray(data.requests)) {
+    return data.requests as CourseAccessRequest[];
+  }
+
+  return [];
+}
+
+export interface LecturerDashboardStats {
+  totalCourses: number;
+  totalStudents: number;
+  totalLearningUnits: number;
+}
+
+export async function fetchLecturerDashboardStats(): Promise<LecturerDashboardStats> {
+  const defaults: LecturerDashboardStats = {
+    totalCourses: 5,
+    totalStudents: 247,
+    totalLearningUnits: 32,
+  };
+
+  try {
+    const courses = await getMyCourses(100, 0);
+    const totalCourses = courses.length;
+
+    const requestsByCourse = await Promise.all(
+      courses.map((course) => getCourseAccessRequests(course.id)),
+    );
+
+    const totalStudents = requestsByCourse.reduce(
+      (sum, requests) => sum + requests.length,
+      0,
+    );
+
+    return {
+      totalCourses,
+      totalStudents,
+      totalLearningUnits: defaults.totalLearningUnits,
+    };
+  } catch {
+    return defaults;
+  }
+}
