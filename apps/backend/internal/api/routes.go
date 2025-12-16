@@ -124,13 +124,13 @@ func SetupRoutes(db *pgxpool.Pool) *gin.Engine {
 		// Course routes
 		courses := v1.Group("/courses")
 		{
-			courses.GET("/", courseHandler.GetCourses)
+			courses.GET("", courseHandler.GetCourses)
 			courses.GET("/:courseId", courseHandler.GetCourseByID)
 			courses.POST("/:courseId/quiz/generate", middleware.AuthWithStatusMiddleware(authService), middleware.EnrollmentRequiredMiddleware(enrollmentStore), quizHandler.GenerateQuiz)
 			courses.POST("/:courseId/flashcards/generate", middleware.AuthWithStatusMiddleware(authService), middleware.EnrollmentRequiredMiddleware(enrollmentStore), quizHandler.GenerateFlashcards)
 
 			courses.GET("/me", middleware.AuthWithStatusMiddleware(authService), middleware.LecturerOnlyMiddleware(authService), courseHandler.GetMyCourses)
-			courses.POST("/", middleware.AuthWithStatusMiddleware(authService), middleware.LecturerOnlyMiddleware(authService), courseHandler.CreateCourse)
+			courses.POST("", middleware.AuthWithStatusMiddleware(authService), middleware.LecturerOnlyMiddleware(authService), courseHandler.CreateCourse)
 			courses.PUT("/:courseId", middleware.AuthWithStatusMiddleware(authService), middleware.LecturerOnlyMiddleware(authService), middleware.CourseOwnershipMiddleware(courseService), courseHandler.UpdateCourse)
 			courses.DELETE("/:courseId", middleware.AuthWithStatusMiddleware(authService), middleware.LecturerOnlyMiddleware(authService), middleware.CourseOwnershipMiddleware(courseService), courseHandler.DeleteCourse)
 
