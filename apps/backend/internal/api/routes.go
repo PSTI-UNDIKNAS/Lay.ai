@@ -144,6 +144,7 @@ func SetupRoutes(db *pgxpool.Pool) *gin.Engine {
 		learningUnits := v1.Group("/learning-units")
 		learningUnits.Use(middleware.AuthWithStatusMiddleware(authService))
 		{
+			learningUnits.GET("/courses/:courseId/units/manage", middleware.LecturerOnlyMiddleware(authService), middleware.CourseOwnershipMiddleware(courseService), learningUnitHandler.GetLearningUnits)
 			learningUnits.POST("/courses/:courseId/units", middleware.LecturerOnlyMiddleware(authService), middleware.CourseOwnershipMiddleware(courseService), learningUnitHandler.CreateLearningUnit)
 			learningUnits.PUT("/:unitId", middleware.LecturerOnlyMiddleware(authService), learningUnitHandler.UpdateLearningUnit)
 			learningUnits.DELETE("/:unitId", middleware.LecturerOnlyMiddleware(authService), learningUnitHandler.DeleteLearningUnit)
