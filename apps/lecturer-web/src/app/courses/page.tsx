@@ -2,6 +2,7 @@
 
 import * as React from 'react';
 import { useEffect, useMemo, useState } from 'react';
+import { useRouter } from 'next/navigation';
 import LecturerShell from '@/components/lecturer/LecturerShell';
 import StatCard from '@/components/lecturer/StatCard';
 import Card from '@/components/lecturer/Card';
@@ -11,6 +12,7 @@ import { Input } from '@/components/ui/input';
 import { CourseAccessType, createCourse, getMyCourses, LecturerCourse } from '@/lib/auth-api';
 
 export default function MyCoursesPage() {
+  const router = useRouter();
   const [courses, setCourses] = useState<LecturerCourse[]>([]);
   const [loading, setLoading] = useState(false);
   const [creating, setCreating] = useState(false);
@@ -108,7 +110,7 @@ export default function MyCoursesPage() {
 
   return (
     <LecturerShell>
-      <div className="space-y-8">
+      <div className="flex h-full flex-col space-y-6 overflow-hidden">
         <div className="flex items-start justify-between">
           <div>
             <h1 className="text-2xl font-semibold text-zinc-900">My Courses</h1>
@@ -192,37 +194,39 @@ export default function MyCoursesPage() {
           <StatCard title="Learning Units" value={<span>{stats.learningUnits}</span>} icon={<FileText className="h-6 w-6" />} />
         </div>
 
-        {error && (
-          <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
-            {error}
-          </div>
-        )}
+        <div className="flex-1 overflow-y-auto space-y-6">
+          {error && (
+            <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+              {error}
+            </div>
+          )}
 
-        <div className="grid grid-cols-1 gap-6">
-          {loading && courses.length === 0 && (
-            <div className="rounded-xl border border-zinc-200 bg-white px-5 py-4 text-sm text-zinc-600">
-              Loading courses...
-            </div>
-          )}
-          {!loading && courses.length === 0 && !error && (
-            <div className="rounded-xl border border-zinc-200 bg-white px-5 py-4 text-sm text-zinc-600">
-              You have not created any courses yet.
-            </div>
-          )}
-          {courses.map((c) => (
-            <Card key={c.id} title={c.title} headerRight={accessChip(c.access_type)}>
-              <div className="space-y-3">
-                <p className="text-sm text-zinc-700">{c.description}</p>
-                <div className="flex items-center justify-between">
-                  <div className="flex gap-3">
-                    <Button variant="outline">View</Button>
-                    <Button variant="outline">Edit</Button>
-                  </div>
-                  <div className="text-xs text-zinc-500">Last updated {formatDate(c.updated_at)}</div>
-                </div>
+          <div className="grid grid-cols-1 gap-6">
+            {loading && courses.length === 0 && (
+              <div className="rounded-xl border border-zinc-200 bg-white px-5 py-4 text-sm text-zinc-600">
+                Loading courses...
               </div>
-            </Card>
-          ))}
+            )}
+            {!loading && courses.length === 0 && !error && (
+              <div className="rounded-xl border border-zinc-200 bg-white px-5 py-4 text-sm text-zinc-600">
+                You have not created any courses yet.
+              </div>
+            )}
+            {courses.map((c) => (
+              <Card key={c.id} title={c.title} headerRight={accessChip(c.access_type)}>
+                <div className="space-y-3">
+                  <p className="text-sm text-zinc-700">{c.description}</p>
+                  <div className="flex items-center justify-between">
+                    <div className="flex gap-3">
+                      <Button variant="outline" onClick={() => router.push(`/courses/${c.id}?mode=view`)}>View</Button>
+                      <Button variant="outline" onClick={() => router.push(`/courses/${c.id}?mode=edit`)}>Edit</Button>
+                    </div>
+                    <div className="text-xs text-zinc-500">Last updated {formatDate(c.updated_at)}</div>
+                  </div>
+                </div>
+              </Card>
+            ))}
+          </div>
         </div>
       </div>
     </LecturerShell>

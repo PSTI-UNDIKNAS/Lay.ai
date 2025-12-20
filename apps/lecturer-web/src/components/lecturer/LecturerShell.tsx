@@ -46,7 +46,7 @@ export default function LecturerShell({ children }: { children: React.ReactNode 
   }, [router])
 
   return (
-    <div className="min-h-screen bg-white">
+    <div className="h-screen bg-white overflow-hidden">
       {authError && (
         <div className="sticky top-0 z-40 w-full bg-red-50 text-red-700 border-b border-red-200 px-4 py-2 text-sm">
           {authError}
@@ -63,11 +63,11 @@ export default function LecturerShell({ children }: { children: React.ReactNode 
         <div className="text-base font-semibold text-zinc-900">Lecturer</div>
       </div>
 
-      <div className="flex min-h-[calc(100vh-0px)]">
+      <div className="flex h-full">
         <div className="hidden md:block">
           <Sidebar />
         </div>
-        <main className="flex-1 p-4 md:p-8">
+        <main className="flex flex-1 flex-col p-4 md:p-8 overflow-hidden">
           {children}
         </main>
       </div>

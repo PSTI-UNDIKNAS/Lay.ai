@@ -45,6 +45,7 @@ func (h *LearningUnitHandler) CreateLearningUnit(c *gin.Context) {
 	var req struct {
 		Title       string `json:"title" binding:"required"`
 		Description string `json:"description"`
+		UnitOrder   int    `json:"unit_order"`
 		OrderIndex  int    `json:"order_index"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -52,8 +53,13 @@ func (h *LearningUnitHandler) CreateLearningUnit(c *gin.Context) {
 		return
 	}
 
+	unitOrder := req.UnitOrder
+	if unitOrder == 0 {
+		unitOrder = req.OrderIndex
+	}
+
 	// Create learning unit
-	unit, err := h.learningUnitService.CreateLearningUnit(courseID.String(), req.Title, req.Description, req.OrderIndex)
+	unit, err := h.learningUnitService.CreateLearningUnit(courseID.String(), req.Title, req.Description, unitOrder)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to create learning unit"})
 		return
@@ -147,6 +153,7 @@ func (h *LearningUnitHandler) UpdateLearningUnit(c *gin.Context) {
 	var req struct {
 		Title       string `json:"title"`
 		Description string `json:"description"`
+		UnitOrder   int    `json:"unit_order"`
 		OrderIndex  int    `json:"order_index"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -162,8 +169,12 @@ func (h *LearningUnitHandler) UpdateLearningUnit(c *gin.Context) {
 	if req.Description != "" {
 		updates["description"] = req.Description
 	}
-	if req.OrderIndex > 0 {
-		updates["order_index"] = req.OrderIndex
+	unitOrder := req.UnitOrder
+	if unitOrder == 0 {
+		unitOrder = req.OrderIndex
+	}
+	if unitOrder > 0 {
+		updates["unit_order"] = unitOrder
 	}
 
 	// Update learning unit

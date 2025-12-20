@@ -101,6 +101,16 @@ export interface LecturerCourse {
   updated_at: string;
 }
 
+export interface LearningUnit {
+  id: string;
+  course_id: string;
+  title: string;
+  description: string;
+  unit_order: number;
+  created_at: string;
+  updated_at: string;
+}
+
 export async function getMyCourses(limit = 100, offset = 0): Promise<LecturerCourse[]> {
   const params = new URLSearchParams();
   if (limit != null) params.set('limit', String(limit));
@@ -132,6 +142,34 @@ export async function getMyCourses(limit = 100, offset = 0): Promise<LecturerCou
 }
 
 export type CourseAccessType = 'public' | 'password' | 'by_request';
+
+export async function updateCourse(
+  courseId: string,
+  updates: { title?: string; description?: string; access_type: CourseAccessType },
+): Promise<LecturerCourse> {
+  const response = await fetch(`${API_BASE_URL}/courses/${courseId}`, {
+    method: 'PUT',
+    headers: {
+      'Content-Type': 'application/json',
+      Accept: 'application/json',
+      ...getAuthHeaders(),
+    },
+    body: JSON.stringify(updates),
+  });
+
+  const data = await response.json().catch(() => ({}));
+
+  if (!response.ok) {
+    const msg = data?.error || data?.message || 'Failed to update course';
+    throw new Error(msg);
+  }
+
+  if (data.course) {
+    return data.course as LecturerCourse;
+  }
+
+  throw new Error('Invalid course response');
+}
 
 export async function createCourse(
   title: string,
@@ -170,6 +208,106 @@ export async function createCourse(
   }
 
   throw new Error('Invalid course response');
+}
+
+export async function getCourseLearningUnits(courseId: string, limit = 100, offset = 0): Promise<LearningUnit[]> {
+  const params = new URLSearchParams();
+  if (limit != null) params.set('limit', String(limit));
+  if (offset != null) params.set('offset', String(offset));
+
+  const response = await fetch(
+    `${API_BASE_URL}/learning-units/courses/${courseId}/units/manage${params.toString() ? `?${params.toString()}` : ''}`,
+    {
+      method: 'GET',
+      headers: {
+        Accept: 'application/json',
+        ...getAuthHeaders(),
+      },
+    },
+  );
+
+  const data = await response.json().catch(() => ({}));
+
+  if (!response.ok) {
+    const msg = data?.error || data?.message || 'Failed to fetch learning units';
+    throw new Error(msg);
+  }
+
+  if (Array.isArray(data.units)) {
+    return data.units as LearningUnit[];
+  }
+
+  if (Array.isArray(data.learning_units)) {
+    return data.learning_units as LearningUnit[];
+  }
+
+  return [];
+}
+
+export async function createLearningUnit(
+  courseId: string,
+  title: string,
+  description: string,
+  unitOrder: number,
+): Promise<LearningUnit> {
+  const response = await fetch(`${API_BASE_URL}/learning-units/courses/${courseId}/units`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Accept: 'application/json',
+      ...getAuthHeaders(),
+    },
+    body: JSON.stringify({
+      title,
+      description,
+      unit_order: unitOrder,
+      order_index: unitOrder,
+    }),
+  });
+
+  const data = await response.json().catch(() => ({}));
+
+  if (!response.ok) {
+    const msg = data?.error || data?.message || 'Failed to create learning unit';
+    throw new Error(msg);
+  }
+
+  if (data.unit) {
+    return data.unit as LearningUnit;
+  }
+
+  throw new Error('Invalid learning unit response');
+}
+
+export async function updateLearningUnit(
+  unitId: string,
+  updates: { title?: string; description?: string; unit_order?: number },
+): Promise<LearningUnit> {
+  const response = await fetch(`${API_BASE_URL}/learning-units/${unitId}`, {
+    method: 'PUT',
+    headers: {
+      'Content-Type': 'application/json',
+      Accept: 'application/json',
+      ...getAuthHeaders(),
+    },
+    body: JSON.stringify({
+      ...updates,
+      ...(updates.unit_order != null ? { order_index: updates.unit_order } : {}),
+    }),
+  });
+
+  const data = await response.json().catch(() => ({}));
+
+  if (!response.ok) {
+    const msg = data?.error || data?.message || 'Failed to update learning unit';
+    throw new Error(msg);
+  }
+
+  if (data.unit) {
+    return data.unit as LearningUnit;
+  }
+
+  throw new Error('Invalid learning unit response');
 }
 
 interface CourseAccessRequest {
