@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import { useParams, useRouter, useSearchParams } from 'next/navigation';
+import { useDropzone } from 'react-dropzone';
 import LecturerShell from '@/components/lecturer/LecturerShell';
 import Card from '@/components/lecturer/Card';
 import { Button } from '@/components/ui/button';
@@ -21,11 +22,17 @@ import {
 import {
   LecturerCourse,
   LearningUnit,
+  LearningUnitDocument,
   getCourseLearningUnits,
+  getLearningUnitDocuments,
   getMyCourses,
   createLearningUnit,
   updateLearningUnit,
   updateCourse,
+  deleteDocument,
+  downloadDocumentPDF,
+  ingestPDF,
+  uploadPDFToR2,
 } from '@/lib/auth-api';
 
 type UnitTabKey = 'materials' | 'assignments' | 'quizzes';
@@ -68,6 +75,66 @@ export default function CourseDetailPage() {
   const [editOrder, setEditOrder] = useState<number>(1);
   const [savingEdit, setSavingEdit] = useState(false);
   const [editMessage, setEditMessage] = useState<string | null>(null);
+
+  const [materialOpen, setMaterialOpen] = useState(false);
+  const [materialUnitId, setMaterialUnitId] = useState<string | null>(null);
+  const [materialFile, setMaterialFile] = useState<File | null>(null);
+  const [materialError, setMaterialError] = useState<string | null>(null);
+  const [materialUploading, setMaterialUploading] = useState(false);
+  const [materialMessage, setMaterialMessage] = useState<string | null>(null);
+
+  const [materialsByUnitId, setMaterialsByUnitId] = useState<Record<string, LearningUnitDocument[]>>({});
+  const [materialsLoadingByUnitId, setMaterialsLoadingByUnitId] = useState<Record<string, boolean>>({});
+  const [materialsErrorByUnitId, setMaterialsErrorByUnitId] = useState<Record<string, string | null>>({});
+  const [deletingDocumentId, setDeletingDocumentId] = useState<string | null>(null);
+
+  const { getRootProps, getInputProps, isDragActive } = useDropzone({
+    accept: { 'application/pdf': ['.pdf'] },
+    multiple: false,
+    maxFiles: 1,
+    onDropAccepted: (files: File[]) => {
+      const file = files[0];
+      if (!file) return;
+      const name = file.name?.toLowerCase() ?? '';
+      const isPdf = file.type === 'application/pdf' || name.endsWith('.pdf');
+      if (!isPdf) {
+        setMaterialFile(null);
+        setMaterialError('Only pdf file are accepted');
+        return;
+      }
+      setMaterialError(null);
+      setMaterialMessage(null);
+      setMaterialFile(file);
+    },
+    onDropRejected: () => {
+      setMaterialFile(null);
+      setMaterialError('Only pdf file are accepted');
+    },
+  });
+
+  async function loadMaterials(unitId: string) {
+    setMaterialsLoadingByUnitId((prev) => ({ ...prev, [unitId]: true }));
+    setMaterialsErrorByUnitId((prev) => ({ ...prev, [unitId]: null }));
+    try {
+      const docs = await getLearningUnitDocuments(unitId);
+      setMaterialsByUnitId((prev) => ({ ...prev, [unitId]: docs }));
+    } catch (err) {
+      setMaterialsErrorByUnitId((prev) => ({
+        ...prev,
+        [unitId]: err instanceof Error ? err.message : 'Failed to load materials',
+      }));
+    } finally {
+      setMaterialsLoadingByUnitId((prev) => ({ ...prev, [unitId]: false }));
+    }
+  }
+
+  useEffect(() => {
+    if (!openUnitId) return;
+    if (activeTab !== 'materials') return;
+    if (materialsByUnitId[openUnitId]) return;
+    if (materialsLoadingByUnitId[openUnitId]) return;
+    void loadMaterials(openUnitId);
+  }, [activeTab, openUnitId, materialsByUnitId, materialsLoadingByUnitId]);
 
   useEffect(() => {
     if (!courseId) return;
@@ -217,6 +284,31 @@ export default function CourseDetailPage() {
       setError(err instanceof Error ? err.message : 'Failed to update course');
     } finally {
       setSavingCourse(false);
+    }
+  }
+
+  async function handleUploadMaterial() {
+    if (!materialUnitId || !materialFile) return;
+    setMaterialUploading(true);
+    setMaterialError(null);
+    setMaterialMessage(null);
+    try {
+      const { originalFileName, newFileName } = await uploadPDFToR2(materialFile);
+      await ingestPDF({
+        originalFileName,
+        newFileName,
+        learningUnitId: materialUnitId,
+      });
+
+      setMaterialMessage('Material uploaded successfully.');
+      setMaterialFile(null);
+      setMaterialOpen(false);
+      await loadMaterials(materialUnitId);
+      setMaterialUnitId(null);
+    } catch (err) {
+      setMaterialError(err instanceof Error ? err.message : 'Failed to upload material');
+    } finally {
+      setMaterialUploading(false);
     }
   }
 
@@ -514,6 +606,84 @@ export default function CourseDetailPage() {
           </div>
         )}
 
+        {isEditMode && materialOpen && (
+          <div className="fixed inset-0 z-50">
+            <div
+              className="absolute inset-0 bg-black/50"
+              onClick={() => {
+                if (materialUploading) return;
+                setMaterialOpen(false);
+                setMaterialUnitId(null);
+                setMaterialFile(null);
+                setMaterialError(null);
+                setMaterialMessage(null);
+              }}
+            />
+            <div className="absolute inset-0 flex items-center justify-center p-4">
+              <Card
+                title="Add Material"
+                className="w-full max-w-xl"
+                bodyClassName="space-y-4"
+              >
+                <div className="text-sm text-zinc-600">
+                  Upload a PDF by dragging it here, or click to browse your files.
+                </div>
+
+                <div
+                  {...getRootProps()}
+                  className={`cursor-pointer rounded-xl border-2 border-dashed px-4 py-10 text-center text-sm ${
+                    isDragActive
+                      ? 'border-zinc-900 bg-zinc-50 text-zinc-900'
+                      : 'border-zinc-200 bg-white text-zinc-600 hover:border-zinc-400'
+                  }`}
+                >
+                  <input {...getInputProps()} />
+                  <div className="font-medium">
+                    {materialFile ? materialFile.name : 'Drag and drop a PDF here, or click to select'}
+                  </div>
+                  <div className="mt-1 text-xs text-zinc-500">Only PDF files are accepted</div>
+                </div>
+
+                {materialError && (
+                  <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+                    {materialError}
+                  </div>
+                )}
+
+                {materialMessage && (
+                  <div className="rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-700">
+                    {materialMessage}
+                  </div>
+                )}
+
+                <div className="flex items-center justify-end gap-2">
+                  <Button
+                    variant="outline"
+                    onClick={() => {
+                      if (materialUploading) return;
+                      setMaterialOpen(false);
+                      setMaterialUnitId(null);
+                      setMaterialFile(null);
+                      setMaterialError(null);
+                      setMaterialMessage(null);
+                    }}
+                    disabled={materialUploading}
+                  >
+                    Close
+                  </Button>
+                  <Button
+                    variant="outline"
+                    onClick={handleUploadMaterial}
+                    disabled={materialUploading || !materialFile}
+                  >
+                    {materialUploading ? 'Uploading...' : 'Upload'}
+                  </Button>
+                </div>
+              </Card>
+            </div>
+          </div>
+        )}
+
         <div className="mt-6 flex-1 overflow-y-auto space-y-4">
           {error && (
             <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
@@ -535,7 +705,7 @@ export default function CourseDetailPage() {
 
           {filteredUnits.map((unit) => {
             const isOpen = openUnitId === unit.id;
-            const materialsCount = 0;
+            const materialsCount = materialsByUnitId[unit.id]?.length ?? 0;
             const assignmentsCount = 0;
             const quizzesCount = 0;
             const studentsLabel = '—';
@@ -671,7 +841,13 @@ export default function CourseDetailPage() {
                               <Button
                                 variant="outline"
                                 className="border-zinc-900 bg-zinc-900 text-white hover:bg-zinc-800 hover:text-white"
-                                onClick={() => setError('Add material is not implemented yet')}
+                                onClick={() => {
+                                  setMaterialError(null);
+                                  setMaterialMessage(null);
+                                  setMaterialFile(null);
+                                  setMaterialUnitId(unit.id);
+                                  setMaterialOpen(true);
+                                }}
                               >
                                 <Plus className="mr-2 h-4 w-4" />
                                 Add Material
@@ -679,9 +855,93 @@ export default function CourseDetailPage() {
                             )}
                           </div>
 
-                          <div className="rounded-xl border border-zinc-200 bg-white px-4 py-8 text-center text-sm text-zinc-600">
-                            No materials yet.
-                          </div>
+                          {materialsErrorByUnitId[unit.id] && (
+                            <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+                              {materialsErrorByUnitId[unit.id]}
+                            </div>
+                          )}
+
+                          {materialsLoadingByUnitId[unit.id] && !materialsByUnitId[unit.id] && (
+                            <div className="rounded-xl border border-zinc-200 bg-white px-4 py-8 text-center text-sm text-zinc-600">
+                              Loading materials...
+                            </div>
+                          )}
+
+                          {!!materialsByUnitId[unit.id]?.length && (
+                            <div className="divide-y divide-zinc-100 rounded-xl border border-zinc-200 bg-white">
+                              {materialsByUnitId[unit.id].map((doc) => (
+                                <div key={doc.id} className="flex items-center justify-between gap-3 px-4 py-3">
+                                  <div className="min-w-0">
+                                    <div className="truncate text-sm font-medium text-zinc-900">
+                                      {doc.file_name}
+                                    </div>
+                                    <div className="text-xs text-zinc-500">
+                                      Uploaded {new Date(doc.created_at).toLocaleString()}
+                                    </div>
+                                  </div>
+                                  <Button
+                                    variant="outline"
+                                    onClick={() => {
+                                      setMaterialsErrorByUnitId((prev) => ({ ...prev, [unit.id]: null }));
+                                      downloadDocumentPDF(doc.id)
+                                        .then((blob) => {
+                                          const blobUrl = URL.createObjectURL(blob);
+                                          window.open(blobUrl, '_blank', 'noopener,noreferrer');
+                                          window.setTimeout(() => URL.revokeObjectURL(blobUrl), 60_000);
+                                        })
+                                        .catch((err: unknown) => {
+                                          setMaterialsErrorByUnitId((prev) => ({
+                                            ...prev,
+                                            [unit.id]:
+                                              err instanceof Error ? err.message : 'Failed to open document',
+                                          }));
+                                        });
+                                    }}
+                                  >
+                                    View
+                                  </Button>
+                                  {isEditMode && (
+                                    <Button
+                                      variant="outline"
+                                      onClick={() => {
+                                        if (deletingDocumentId) return;
+                                        const ok = window.confirm('Delete this material?');
+                                        if (!ok) return;
+                                        setDeletingDocumentId(doc.id);
+                                        setMaterialsErrorByUnitId((prev) => ({ ...prev, [unit.id]: null }));
+                                        deleteDocument(doc.id)
+                                          .then(() => {
+                                            setMaterialsByUnitId((prev) => ({
+                                              ...prev,
+                                              [unit.id]: (prev[unit.id] ?? []).filter((d) => d.id !== doc.id),
+                                            }));
+                                          })
+                                          .catch((err: unknown) => {
+                                            setMaterialsErrorByUnitId((prev) => ({
+                                              ...prev,
+                                              [unit.id]:
+                                                err instanceof Error ? err.message : 'Failed to delete document',
+                                            }));
+                                          })
+                                          .finally(() => setDeletingDocumentId(null));
+                                      }}
+                                      disabled={deletingDocumentId === doc.id}
+                                    >
+                                      {deletingDocumentId === doc.id ? 'Deleting...' : 'Delete'}
+                                    </Button>
+                                  )}
+                                </div>
+                              ))}
+                            </div>
+                          )}
+
+                          {!materialsLoadingByUnitId[unit.id] &&
+                            (!materialsByUnitId[unit.id] || materialsByUnitId[unit.id].length === 0) &&
+                            !materialsErrorByUnitId[unit.id] && (
+                              <div className="rounded-xl border border-zinc-200 bg-white px-4 py-8 text-center text-sm text-zinc-600">
+                                No materials yet.
+                              </div>
+                            )}
                         </div>
                       )}
 

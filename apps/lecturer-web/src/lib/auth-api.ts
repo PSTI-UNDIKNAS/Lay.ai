@@ -377,3 +377,163 @@ export async function fetchLecturerDashboardStats(): Promise<LecturerDashboardSt
     return defaults;
   }
 }
+
+export interface GenerateUploadURLResponse {
+  uploadUrl: string;
+  newFileName: string;
+}
+
+export async function generateAIUploadURL(fileName: string): Promise<GenerateUploadURLResponse> {
+  const response = await fetch(`${API_BASE_URL}/ai/upload-url`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Accept: 'application/json',
+      ...getAuthHeaders(),
+    },
+    body: JSON.stringify({ fileName }),
+  });
+
+  const data = await response.json().catch(() => ({}));
+
+  if (!response.ok) {
+    const msg = data?.error || data?.message || 'Failed to generate upload URL';
+    throw new Error(msg);
+  }
+
+  if (data?.uploadUrl && data?.newFileName) {
+    return data as GenerateUploadURLResponse;
+  }
+
+  throw new Error('Invalid upload URL response');
+}
+
+export interface IngestPDFResponse {
+  message?: string;
+  chunks?: unknown[];
+  document_id?: string;
+}
+
+export async function ingestPDF(params: {
+  originalFileName: string;
+  newFileName: string;
+  learningUnitId: string;
+}): Promise<IngestPDFResponse> {
+  const response = await fetch(`${API_BASE_URL}/ai/ingest`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Accept: 'application/json',
+      ...getAuthHeaders(),
+    },
+    body: JSON.stringify(params),
+  });
+
+  const data = await response.json().catch(() => ({}));
+
+  if (!response.ok) {
+    const msg = data?.error || data?.message || 'Failed to ingest PDF';
+    throw new Error(msg);
+  }
+
+  return data as IngestPDFResponse;
+}
+
+export interface UploadPDFResponse {
+  originalFileName: string;
+  newFileName: string;
+}
+
+export async function uploadPDFToR2(file: File): Promise<UploadPDFResponse> {
+  const formData = new FormData();
+  formData.append('file', file, file.name);
+
+  const response = await fetch(`${API_BASE_URL}/ai/upload`, {
+    method: 'POST',
+    headers: {
+      Accept: 'application/json',
+      ...getAuthHeaders(),
+    },
+    body: formData,
+  });
+
+  const data = await response.json().catch(() => ({}));
+
+  if (!response.ok) {
+    const msg = data?.error || data?.message || 'Failed to upload PDF';
+    throw new Error(msg);
+  }
+
+  if (data?.originalFileName && data?.newFileName) {
+    return data as UploadPDFResponse;
+  }
+
+  throw new Error('Invalid upload response');
+}
+
+export interface LearningUnitDocument {
+  id: string;
+  learning_unit_id: string;
+  file_name: string;
+  storage_path: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export async function getLearningUnitDocuments(unitId: string): Promise<LearningUnitDocument[]> {
+  const response = await fetch(`${API_BASE_URL}/ai/units/${unitId}/documents`, {
+    method: 'GET',
+    headers: {
+      Accept: 'application/json',
+      ...getAuthHeaders(),
+    },
+  });
+
+  const data = await response.json().catch(() => ({}));
+
+  if (!response.ok) {
+    const msg = data?.error || data?.message || 'Failed to fetch learning unit documents';
+    throw new Error(msg);
+  }
+
+  if (Array.isArray(data?.documents)) {
+    return data.documents as LearningUnitDocument[];
+  }
+
+  return [];
+}
+
+export async function downloadDocumentPDF(documentId: string): Promise<Blob> {
+  const response = await fetch(`${API_BASE_URL}/ai/documents/${documentId}/download`, {
+    method: 'GET',
+    headers: {
+      Accept: 'application/pdf',
+      ...getAuthHeaders(),
+    },
+  });
+
+  if (!response.ok) {
+    const data = await response.json().catch(() => ({}));
+    const msg = data?.error || data?.message || 'Failed to download document';
+    throw new Error(msg);
+  }
+
+  return await response.blob();
+}
+
+export async function deleteDocument(documentId: string): Promise<void> {
+  const response = await fetch(`${API_BASE_URL}/ai/documents/${documentId}`, {
+    method: 'DELETE',
+    headers: {
+      Accept: 'application/json',
+      ...getAuthHeaders(),
+    },
+  });
+
+  const data = await response.json().catch(() => ({}));
+
+  if (!response.ok) {
+    const msg = data?.error || data?.message || 'Failed to delete document';
+    throw new Error(msg);
+  }
+}
