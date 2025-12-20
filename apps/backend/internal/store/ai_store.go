@@ -123,3 +123,8 @@ func (s *AIStore) GetChunksByLearningUnits(ctx context.Context, unitIDs []uuid.U
 	}
 	return results, rows.Err()
 }
+
+func (s *AIStore) DeleteChunksByDocument(ctx context.Context, documentID uuid.UUID) error {
+	_, err := s.db.Exec(ctx, `DELETE FROM document_chunks WHERE document_id = $1`, documentID)
+	return err
+}

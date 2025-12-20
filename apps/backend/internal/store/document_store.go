@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
@@ -44,4 +45,70 @@ func (s *DocumentStore) CreateDocument(ctx context.Context, learningUnitID uuid.
 		return nil, err
 	}
 	return &doc, nil
+}
+
+func (s *DocumentStore) GetDocumentByID(ctx context.Context, id uuid.UUID) (*Document, error) {
+	query := `
+		SELECT id, learning_unit_id, file_name, storage_path, created_at, updated_at
+		FROM documents
+		WHERE id = $1
+	`
+	var doc Document
+	err := s.db.QueryRow(ctx, query, id).Scan(
+		&doc.ID,
+		&doc.LearningUnitID,
+		&doc.FileName,
+		&doc.StoragePath,
+		&doc.CreatedAt,
+		&doc.UpdatedAt,
+	)
+	if err != nil {
+		if err == pgx.ErrNoRows {
+			return nil, nil
+		}
+		return nil, err
+	}
+	return &doc, nil
+}
+
+func (s *DocumentStore) ListDocumentsByLearningUnit(ctx context.Context, learningUnitID uuid.UUID) ([]Document, error) {
+	query := `
+		SELECT id, learning_unit_id, file_name, storage_path, created_at, updated_at
+		FROM documents
+		WHERE learning_unit_id = $1
+		ORDER BY created_at DESC
+	`
+	rows, err := s.db.Query(ctx, query, learningUnitID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var docs []Document
+	for rows.Next() {
+		var doc Document
+		if err := rows.Scan(
+			&doc.ID,
+			&doc.LearningUnitID,
+			&doc.FileName,
+			&doc.StoragePath,
+			&doc.CreatedAt,
+			&doc.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		docs = append(docs, doc)
+	}
+	if rows.Err() != nil {
+		return nil, rows.Err()
+	}
+	return docs, nil
+}
+
+func (s *DocumentStore) DeleteDocument(ctx context.Context, id uuid.UUID) (bool, error) {
+	result, err := s.db.Exec(ctx, `DELETE FROM documents WHERE id = $1`, id)
+	if err != nil {
+		return false, err
+	}
+	return result.RowsAffected() > 0, nil
 }

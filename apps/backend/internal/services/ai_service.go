@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net/url"
 	"os"
 	"path"
 	"regexp"
@@ -133,6 +134,108 @@ func (s *AIService) GeneratePresignedUploadURL(ctx context.Context, originalFile
 	}
 
 	return req.URL, newFileName, nil
+}
+
+func (s *AIService) UploadPDFToR2(ctx context.Context, originalFileName string, body io.Reader) (string, error) {
+	if s.s3Client == nil {
+		return "", errors.New("R2/S3 client not initialized")
+	}
+
+	newID := uuid.New().String()
+	fileExtension := strings.ToLower(path.Ext(originalFileName))
+	if fileExtension != ".pdf" {
+		fileExtension = ".pdf"
+	}
+	newFileName := fmt.Sprintf("%s%s", newID, fileExtension)
+
+	_, err := s.s3Client.PutObject(ctx, &s3.PutObjectInput{
+		Bucket:      aws.String(s.r2BucketName),
+		Key:         aws.String(newFileName),
+		Body:        body,
+		ContentType: aws.String("application/pdf"),
+	})
+	if err != nil {
+		return "", fmt.Errorf("failed to upload file: %w", err)
+	}
+
+	return newFileName, nil
+}
+
+func (s *AIService) GetDocumentByID(ctx context.Context, id uuid.UUID) (*store.Document, error) {
+	if s.docSvc == nil {
+		return nil, errors.New("document service not initialized")
+	}
+	return s.docSvc.GetDocumentByID(ctx, id)
+}
+
+func (s *AIService) ListDocumentsByLearningUnit(ctx context.Context, learningUnitID uuid.UUID) ([]store.Document, error) {
+	if s.docSvc == nil {
+		return nil, errors.New("document service not initialized")
+	}
+	return s.docSvc.ListDocumentsByLearningUnit(ctx, learningUnitID)
+}
+
+func (s *AIService) DeleteDocument(ctx context.Context, documentID uuid.UUID) (bool, error) {
+	if s.docSvc == nil {
+		return false, errors.New("document service not initialized")
+	}
+	if s.s3Client == nil {
+		return false, errors.New("S3 client not initialized")
+	}
+
+	doc, err := s.docSvc.GetDocumentByID(ctx, documentID)
+	if err != nil {
+		return false, err
+	}
+	if doc == nil {
+		return false, nil
+	}
+
+	key := extractR2Key(doc.StoragePath)
+	if key == "" {
+		return false, errors.New("invalid storage path")
+	}
+
+	if _, err := s.s3Client.DeleteObject(ctx, &s3.DeleteObjectInput{
+		Bucket: aws.String(s.r2BucketName),
+		Key:    aws.String(key),
+	}); err != nil {
+		return false, err
+	}
+
+	if err := s.store.DeleteChunksByDocument(ctx, documentID); err != nil {
+		return false, err
+	}
+
+	return s.docSvc.DeleteDocument(ctx, documentID)
+}
+
+func (s *AIService) DownloadPDFFromR2(ctx context.Context, key string) (io.ReadCloser, error) {
+	if s.s3Client == nil {
+		return nil, errors.New("S3 client not initialized")
+	}
+	if key == "" {
+		return nil, errors.New("key is required")
+	}
+	out, err := s.s3Client.GetObject(ctx, &s3.GetObjectInput{
+		Bucket: aws.String(s.r2BucketName),
+		Key:    aws.String(key),
+	})
+	if err != nil {
+		return nil, err
+	}
+	return out.Body, nil
+}
+
+func extractR2Key(storagePath string) string {
+	keyPath := storagePath
+	if strings.Contains(keyPath, "://") {
+		if u, err := url.Parse(keyPath); err == nil {
+			keyPath = u.Path
+		}
+	}
+	key := strings.TrimPrefix(path.Clean(keyPath), "/")
+	return path.Base(key)
 }
 
 // ChunkEmbedding is a chunk with its embedding vector.

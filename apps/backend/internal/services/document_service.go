@@ -24,3 +24,15 @@ type CreateDocumentParams struct {
 func (s *DocumentService) CreateDocument(ctx context.Context, params CreateDocumentParams) (*store.Document, error) {
 	return s.store.CreateDocument(ctx, params.LearningUnitID, params.FileName, params.StoragePath)
 }
+
+func (s *DocumentService) GetDocumentByID(ctx context.Context, id uuid.UUID) (*store.Document, error) {
+	return s.store.GetDocumentByID(ctx, id)
+}
+
+func (s *DocumentService) ListDocumentsByLearningUnit(ctx context.Context, learningUnitID uuid.UUID) ([]store.Document, error) {
+	return s.store.ListDocumentsByLearningUnit(ctx, learningUnitID)
+}
+
+func (s *DocumentService) DeleteDocument(ctx context.Context, id uuid.UUID) (bool, error) {
+	return s.store.DeleteDocument(ctx, id)
+}
