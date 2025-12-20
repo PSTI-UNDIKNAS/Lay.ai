@@ -183,6 +183,10 @@ func SetupRoutes(db *pgxpool.Pool) *gin.Engine {
 		ai := v1.Group("/ai")
 		{
 			ai.POST("/upload-url", middleware.AuthWithStatusMiddleware(authService), middleware.LecturerOnlyMiddleware(authService), aiHandler.GenerateUploadURLHandler)
+			ai.POST("/upload", middleware.AuthWithStatusMiddleware(authService), middleware.LecturerOnlyMiddleware(authService), aiHandler.UploadPDFHandler)
+			ai.GET("/units/:unitId/documents", middleware.AuthWithStatusMiddleware(authService), middleware.LecturerOnlyMiddleware(authService), aiHandler.ListUnitDocumentsHandler)
+			ai.GET("/documents/:documentId/download", middleware.AuthWithStatusMiddleware(authService), middleware.LecturerOnlyMiddleware(authService), aiHandler.DownloadDocumentHandler)
+			ai.DELETE("/documents/:documentId", middleware.AuthWithStatusMiddleware(authService), middleware.LecturerOnlyMiddleware(authService), aiHandler.DeleteDocumentHandler)
 			ai.POST("/ingest", aiHandler.IngestPDFHandler)
 			ai.POST("/search", aiHandler.SearchSimilarHandler)
 			ai.POST("/answer", aiHandler.AnswerHandler)

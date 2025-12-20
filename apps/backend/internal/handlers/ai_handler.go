@@ -1,7 +1,13 @@
 package handlers
 
 import (
+	"fmt"
+	"io"
 	"net/http"
+	"net/url"
+	"path"
+	"path/filepath"
+	"strings"
 
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
@@ -84,6 +90,120 @@ func (h *AIHandler) GenerateUploadURLHandler(c *gin.Context) {
 		UploadURL:   uploadURL,
 		NewFileName: newFileName,
 	})
+}
+
+type UploadPDFResponse struct {
+	OriginalFileName string `json:"originalFileName"`
+	NewFileName      string `json:"newFileName"`
+}
+
+func (h *AIHandler) UploadPDFHandler(c *gin.Context) {
+	fileHeader, err := c.FormFile("file")
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "file is required"})
+		return
+	}
+
+	if strings.ToLower(filepath.Ext(fileHeader.Filename)) != ".pdf" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Only pdf file are accepted"})
+		return
+	}
+
+	f, err := fileHeader.Open()
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to open uploaded file"})
+		return
+	}
+	defer f.Close()
+
+	newFileName, err := h.svc.UploadPDFToR2(c.Request.Context(), fileHeader.Filename, f)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, UploadPDFResponse{
+		OriginalFileName: fileHeader.Filename,
+		NewFileName:      newFileName,
+	})
+}
+
+func (h *AIHandler) ListUnitDocumentsHandler(c *gin.Context) {
+	unitIDStr := c.Param("unitId")
+	unitID, err := uuid.Parse(unitIDStr)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid unit id"})
+		return
+	}
+
+	docs, err := h.svc.ListDocumentsByLearningUnit(c.Request.Context(), unitID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"documents": docs})
+}
+
+func (h *AIHandler) DownloadDocumentHandler(c *gin.Context) {
+	docIDStr := c.Param("documentId")
+	docID, err := uuid.Parse(docIDStr)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid document id"})
+		return
+	}
+
+	doc, err := h.svc.GetDocumentByID(c.Request.Context(), docID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	if doc == nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "document not found"})
+		return
+	}
+
+	keyPath := doc.StoragePath
+	if strings.Contains(keyPath, "://") {
+		if u, err := url.Parse(keyPath); err == nil {
+			keyPath = u.Path
+		}
+	}
+	key := strings.TrimPrefix(path.Clean(keyPath), "/")
+	key = path.Base(key)
+
+	body, err := h.svc.DownloadPDFFromR2(c.Request.Context(), key)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	defer body.Close()
+
+	c.Header("Content-Type", "application/pdf")
+	c.Header("Content-Disposition", fmt.Sprintf("inline; filename=%q", doc.FileName))
+	c.Status(http.StatusOK)
+	_, _ = io.Copy(c.Writer, body)
+}
+
+func (h *AIHandler) DeleteDocumentHandler(c *gin.Context) {
+	docIDStr := c.Param("documentId")
+	docID, err := uuid.Parse(docIDStr)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid document id"})
+		return
+	}
+
+	deleted, err := h.svc.DeleteDocument(c.Request.Context(), docID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	if !deleted {
+		c.JSON(http.StatusNotFound, gin.H{"error": "document not found"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"message": "document deleted"})
 }
 
 // SearchRequest captures query for similarity search.
