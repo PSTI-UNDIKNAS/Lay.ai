@@ -2,6 +2,7 @@ package store
 
 import (
 	"context"
+	"fmt"
 	"time"
 
 	"github.com/google/uuid"
@@ -111,4 +112,35 @@ func (s *DocumentStore) DeleteDocument(ctx context.Context, id uuid.UUID) (bool,
 		return false, err
 	}
 	return result.RowsAffected() > 0, nil
+}
+
+func (s *DocumentStore) CountDocumentsByLearningUnitIDs(ctx context.Context, unitIDs []uuid.UUID) (map[uuid.UUID]int, error) {
+	if len(unitIDs) == 0 {
+		return map[uuid.UUID]int{}, nil
+	}
+
+	query := `
+		SELECT learning_unit_id, COUNT(*)
+		FROM documents
+		WHERE learning_unit_id = ANY($1)
+		GROUP BY learning_unit_id
+	`
+
+	rows, err := s.db.Query(ctx, query, unitIDs)
+	if err != nil {
+		return nil, fmt.Errorf("failed to count documents: %w", err)
+	}
+	defer rows.Close()
+
+	counts := make(map[uuid.UUID]int, len(unitIDs))
+	for rows.Next() {
+		var unitID uuid.UUID
+		var count int
+		if err := rows.Scan(&unitID, &count); err != nil {
+			return nil, fmt.Errorf("failed to scan document count: %w", err)
+		}
+		counts[unitID] = count
+	}
+
+	return counts, nil
 }

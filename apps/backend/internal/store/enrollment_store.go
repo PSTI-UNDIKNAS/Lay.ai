@@ -243,3 +243,40 @@ func (s *EnrollmentStore) DeleteEnrollment(enrollmentID string) error {
 
 	return nil
 }
+
+func (s *EnrollmentStore) GetEnrolledStudentsByCourseID(courseID string) ([]*models.User, error) {
+	query := `
+		SELECT u.id, u.name, u.email, u.unique_identifier, u.role, u.status, u.created_at, u.updated_at
+		FROM enrollments e
+		JOIN users u ON u.id = e.student_id
+		WHERE e.course_id = $1 AND e.status = $2
+		ORDER BY u.name ASC
+	`
+
+	rows, err := s.db.Query(context.Background(), query, courseID, models.EnrollmentStatusEnrolled)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get enrolled students: %w", err)
+	}
+	defer rows.Close()
+
+	var students []*models.User
+	for rows.Next() {
+		var u models.User
+		err := rows.Scan(
+			&u.ID,
+			&u.Name,
+			&u.Email,
+			&u.UniqueIdentifier,
+			&u.Role,
+			&u.Status,
+			&u.CreatedAt,
+			&u.UpdatedAt,
+		)
+		if err != nil {
+			return nil, fmt.Errorf("failed to scan enrolled student: %w", err)
+		}
+		students = append(students, &u)
+	}
+
+	return students, nil
+}

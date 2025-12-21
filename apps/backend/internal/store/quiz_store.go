@@ -9,6 +9,7 @@ import (
 
 	"lay.ai/backend/internal/models"
 
+	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
@@ -272,8 +273,6 @@ func (s *QuizStore) GetFlashcardSetByID(setID string) (*models.FlashcardSet, err
 	return &flashcardSet, nil
 }
 
-
-
 // UpdateFlashcardSet updates a flashcard set in the database
 func (s *QuizStore) UpdateFlashcardSet(setID string, updates map[string]interface{}) (*models.FlashcardSet, error) {
 	if len(updates) == 0 {
@@ -353,4 +352,35 @@ func (s *QuizStore) AddFlashcardToSet(setID string, flashcard *models.Flashcard)
 	}
 
 	return nil
+}
+
+func (s *QuizStore) CountQuizzesByLearningUnitIDs(unitIDs []uuid.UUID) (map[uuid.UUID]int, error) {
+	if len(unitIDs) == 0 {
+		return map[uuid.UUID]int{}, nil
+	}
+
+	query := `
+		SELECT learning_unit_id, COUNT(*)
+		FROM quizzes
+		WHERE learning_unit_id = ANY($1)
+		GROUP BY learning_unit_id
+	`
+
+	rows, err := s.db.Query(context.Background(), query, unitIDs)
+	if err != nil {
+		return nil, fmt.Errorf("failed to count quizzes: %w", err)
+	}
+	defer rows.Close()
+
+	counts := make(map[uuid.UUID]int, len(unitIDs))
+	for rows.Next() {
+		var unitID uuid.UUID
+		var count int
+		if err := rows.Scan(&unitID, &count); err != nil {
+			return nil, fmt.Errorf("failed to scan quiz count: %w", err)
+		}
+		counts[unitID] = count
+	}
+
+	return counts, nil
 }
