@@ -22,8 +22,12 @@ import {
 import {
   LecturerCourse,
   LearningUnit,
+  LearningUnitAssignment,
   LearningUnitDocument,
+  createLearningUnitAssignment,
   getCourseLearningUnits,
+  getCourseLearningUnitSummaries,
+  getLearningUnitAssignments,
   getLearningUnitDocuments,
   getMyCourses,
   createLearningUnit,
@@ -88,6 +92,22 @@ export default function CourseDetailPage() {
   const [materialsErrorByUnitId, setMaterialsErrorByUnitId] = useState<Record<string, string | null>>({});
   const [deletingDocumentId, setDeletingDocumentId] = useState<string | null>(null);
 
+  const [assignmentOpen, setAssignmentOpen] = useState(false);
+  const [assignmentUnitId, setAssignmentUnitId] = useState<string | null>(null);
+  const [assignmentTitle, setAssignmentTitle] = useState('');
+  const [assignmentDescription, setAssignmentDescription] = useState('');
+  const [assignmentDueDate, setAssignmentDueDate] = useState('');
+  const [assignmentSaving, setAssignmentSaving] = useState(false);
+  const [assignmentMessage, setAssignmentMessage] = useState<string | null>(null);
+
+  const [assignmentsByUnitId, setAssignmentsByUnitId] = useState<Record<string, LearningUnitAssignment[]>>({});
+  const [assignmentsLoadingByUnitId, setAssignmentsLoadingByUnitId] = useState<Record<string, boolean>>({});
+  const [assignmentsErrorByUnitId, setAssignmentsErrorByUnitId] = useState<Record<string, string | null>>({});
+
+  const [unitSummaryByUnitId, setUnitSummaryByUnitId] = useState<
+    Record<string, { materialCount: number; assignmentCount: number; quizCount: number }>
+  >({});
+
   const { getRootProps, getInputProps, isDragActive } = useDropzone({
     accept: { 'application/pdf': ['.pdf'] },
     multiple: false,
@@ -118,13 +138,55 @@ export default function CourseDetailPage() {
     try {
       const docs = await getLearningUnitDocuments(unitId);
       setMaterialsByUnitId((prev) => ({ ...prev, [unitId]: docs }));
+      setUnitSummaryByUnitId((prev) => {
+        const current = prev[unitId];
+        return {
+          ...prev,
+          [unitId]: {
+            materialCount: docs.length,
+            assignmentCount: current?.assignmentCount ?? 0,
+            quizCount: current?.quizCount ?? 0,
+          },
+        };
+      });
+      return docs;
     } catch (err) {
       setMaterialsErrorByUnitId((prev) => ({
         ...prev,
         [unitId]: err instanceof Error ? err.message : 'Failed to load materials',
       }));
+      return null;
     } finally {
       setMaterialsLoadingByUnitId((prev) => ({ ...prev, [unitId]: false }));
+    }
+  }
+
+  async function loadAssignments(unitId: string) {
+    setAssignmentsLoadingByUnitId((prev) => ({ ...prev, [unitId]: true }));
+    setAssignmentsErrorByUnitId((prev) => ({ ...prev, [unitId]: null }));
+    try {
+      const assignments = await getLearningUnitAssignments(unitId, 100, 0);
+      setAssignmentsByUnitId((prev) => ({ ...prev, [unitId]: assignments }));
+      setUnitSummaryByUnitId((prev) => {
+        const current = prev[unitId];
+        return {
+          ...prev,
+          [unitId]: {
+            materialCount: current?.materialCount ?? 0,
+            assignmentCount: assignments.length,
+            quizCount: current?.quizCount ?? 0,
+          },
+        };
+      });
+      return assignments;
+    } catch (err) {
+      setAssignmentsErrorByUnitId((prev) => ({
+        ...prev,
+        [unitId]: err instanceof Error ? err.message : 'Failed to load assignments',
+      }));
+      return null;
+    } finally {
+      setAssignmentsLoadingByUnitId((prev) => ({ ...prev, [unitId]: false }));
     }
   }
 
@@ -135,6 +197,14 @@ export default function CourseDetailPage() {
     if (materialsLoadingByUnitId[openUnitId]) return;
     void loadMaterials(openUnitId);
   }, [activeTab, openUnitId, materialsByUnitId, materialsLoadingByUnitId]);
+
+  useEffect(() => {
+    if (!openUnitId) return;
+    if (activeTab !== 'assignments') return;
+    if (assignmentsByUnitId[openUnitId]) return;
+    if (assignmentsLoadingByUnitId[openUnitId]) return;
+    void loadAssignments(openUnitId);
+  }, [activeTab, openUnitId, assignmentsByUnitId, assignmentsLoadingByUnitId]);
 
   useEffect(() => {
     if (!courseId) return;
@@ -166,6 +236,31 @@ export default function CourseDetailPage() {
         if (!mounted) return;
         setLoadingCourse(false);
       });
+
+    return () => {
+      mounted = false;
+    };
+  }, [courseId]);
+
+  useEffect(() => {
+    if (!courseId) return;
+    let mounted = true;
+    getCourseLearningUnitSummaries(courseId)
+      .then((summaries) => {
+        if (!mounted) return;
+        setUnitSummaryByUnitId(() => {
+          const next: Record<string, { materialCount: number; assignmentCount: number; quizCount: number }> = {};
+          for (const s of summaries) {
+            next[s.unit_id] = {
+              materialCount: s.material_count ?? 0,
+              assignmentCount: s.assignment_count ?? 0,
+              quizCount: s.quiz_count ?? 0,
+            };
+          }
+          return next;
+        });
+      })
+      .catch(() => {});
 
     return () => {
       mounted = false;
@@ -303,12 +398,74 @@ export default function CourseDetailPage() {
       setMaterialMessage('Material uploaded successfully.');
       setMaterialFile(null);
       setMaterialOpen(false);
-      await loadMaterials(materialUnitId);
+      const docs = await loadMaterials(materialUnitId);
+      if (docs) {
+        setUnitSummaryByUnitId((prev) => {
+          const current = prev[materialUnitId];
+          return {
+            ...prev,
+            [materialUnitId]: {
+              materialCount: docs.length,
+              assignmentCount: current?.assignmentCount ?? 0,
+              quizCount: current?.quizCount ?? 0,
+            },
+          };
+        });
+      }
       setMaterialUnitId(null);
     } catch (err) {
       setMaterialError(err instanceof Error ? err.message : 'Failed to upload material');
     } finally {
       setMaterialUploading(false);
+    }
+  }
+
+  async function handleCreateAssignment() {
+    if (!assignmentUnitId) return;
+    if (!assignmentTitle.trim()) return;
+    setAssignmentSaving(true);
+    setAssignmentMessage(null);
+    setAssignmentsErrorByUnitId((prev) => ({ ...prev, [assignmentUnitId]: null }));
+
+    const dueDate =
+      assignmentDueDate.trim() ? new Date(assignmentDueDate).toISOString() : undefined;
+
+    try {
+      const created = await createLearningUnitAssignment(assignmentUnitId, {
+        title: assignmentTitle.trim(),
+        description: assignmentDescription.trim(),
+        ...(dueDate ? { due_date: dueDate } : {}),
+      });
+
+      setAssignmentsByUnitId((prev) => ({
+        ...prev,
+        [assignmentUnitId]: [created, ...(prev[assignmentUnitId] ?? [])],
+      }));
+      setUnitSummaryByUnitId((prev) => {
+        const current = prev[assignmentUnitId];
+        return {
+          ...prev,
+          [assignmentUnitId]: {
+            materialCount: current?.materialCount ?? 0,
+            assignmentCount: (current?.assignmentCount ?? 0) + 1,
+            quizCount: current?.quizCount ?? 0,
+          },
+        };
+      });
+      setAssignmentMessage('Assignment created successfully.');
+      setAssignmentTitle('');
+      setAssignmentDescription('');
+      setAssignmentDueDate('');
+      setAssignmentOpen(false);
+      setAssignmentUnitId(null);
+    } catch (err) {
+      setAssignmentsErrorByUnitId((prev) => ({
+        ...prev,
+        [assignmentUnitId]:
+          err instanceof Error ? err.message : 'Failed to create assignment',
+      }));
+    } finally {
+      setAssignmentSaving(false);
     }
   }
 
@@ -684,6 +841,98 @@ export default function CourseDetailPage() {
           </div>
         )}
 
+        {isEditMode && assignmentOpen && (
+          <div className="fixed inset-0 z-50">
+            <div
+              className="absolute inset-0 bg-black/50"
+              onClick={() => {
+                if (assignmentSaving) return;
+                setAssignmentOpen(false);
+                setAssignmentUnitId(null);
+                setAssignmentTitle('');
+                setAssignmentDescription('');
+                setAssignmentDueDate('');
+                setAssignmentMessage(null);
+              }}
+            />
+            <div className="absolute inset-0 flex items-center justify-center p-4">
+              <Card
+                title="Add Assignment"
+                className="w-full max-w-xl"
+                bodyClassName="space-y-4"
+              >
+                {assignmentMessage && (
+                  <div className="rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-700">
+                    {assignmentMessage}
+                  </div>
+                )}
+
+                <div className="space-y-2">
+                  <div className="text-xs font-medium uppercase tracking-wide text-zinc-500">
+                    Title
+                  </div>
+                  <Input
+                    value={assignmentTitle}
+                    onChange={(e) => setAssignmentTitle(e.target.value)}
+                    disabled={assignmentSaving}
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <div className="text-xs font-medium uppercase tracking-wide text-zinc-500">
+                    Description
+                  </div>
+                  <textarea
+                    className="min-h-[96px] w-full rounded-md border border-zinc-200 px-3 py-2 text-sm text-zinc-900 shadow-sm outline-none ring-zinc-900/5 placeholder:text-zinc-400 focus-visible:ring-2"
+                    value={assignmentDescription}
+                    onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) =>
+                      setAssignmentDescription(e.target.value)
+                    }
+                    disabled={assignmentSaving}
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <div className="text-xs font-medium uppercase tracking-wide text-zinc-500">
+                    Due Date (optional)
+                  </div>
+                  <Input
+                    type="datetime-local"
+                    value={assignmentDueDate}
+                    onChange={(e) => setAssignmentDueDate(e.target.value)}
+                    disabled={assignmentSaving}
+                  />
+                </div>
+
+                <div className="flex items-center justify-end gap-2">
+                  <Button
+                    variant="outline"
+                    onClick={() => {
+                      if (assignmentSaving) return;
+                      setAssignmentOpen(false);
+                      setAssignmentUnitId(null);
+                      setAssignmentTitle('');
+                      setAssignmentDescription('');
+                      setAssignmentDueDate('');
+                      setAssignmentMessage(null);
+                    }}
+                    disabled={assignmentSaving}
+                  >
+                    Close
+                  </Button>
+                  <Button
+                    variant="outline"
+                    onClick={handleCreateAssignment}
+                    disabled={assignmentSaving || !assignmentTitle.trim()}
+                  >
+                    {assignmentSaving ? 'Creating...' : 'Create'}
+                  </Button>
+                </div>
+              </Card>
+            </div>
+          </div>
+        )}
+
         <div className="mt-6 flex-1 overflow-y-auto space-y-4">
           {error && (
             <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
@@ -705,9 +954,11 @@ export default function CourseDetailPage() {
 
           {filteredUnits.map((unit) => {
             const isOpen = openUnitId === unit.id;
-            const materialsCount = materialsByUnitId[unit.id]?.length ?? 0;
-            const assignmentsCount = 0;
-            const quizzesCount = 0;
+            const summary = unitSummaryByUnitId[unit.id];
+            const materialsCount = summary?.materialCount ?? materialsByUnitId[unit.id]?.length ?? 0;
+            const assignmentsCount =
+              summary?.assignmentCount ?? assignmentsByUnitId[unit.id]?.length ?? 0;
+            const quizzesCount = summary?.quizCount ?? 0;
             const studentsLabel = '—';
 
             return (
@@ -911,10 +1162,26 @@ export default function CourseDetailPage() {
                                         setMaterialsErrorByUnitId((prev) => ({ ...prev, [unit.id]: null }));
                                         deleteDocument(doc.id)
                                           .then(() => {
-                                            setMaterialsByUnitId((prev) => ({
-                                              ...prev,
-                                              [unit.id]: (prev[unit.id] ?? []).filter((d) => d.id !== doc.id),
-                                            }));
+                                            setMaterialsByUnitId((prev) => {
+                                              const nextDocs = (prev[unit.id] ?? []).filter((d) => d.id !== doc.id);
+                                              setUnitSummaryByUnitId((summaryPrev) => {
+                                                const current = summaryPrev[unit.id];
+                                                if (!current) {
+                                                  return summaryPrev;
+                                                }
+                                                return {
+                                                  ...summaryPrev,
+                                                  [unit.id]: {
+                                                    ...current,
+                                                    materialCount: Math.max(0, current.materialCount - 1),
+                                                  },
+                                                };
+                                              });
+                                              return {
+                                                ...prev,
+                                                [unit.id]: nextDocs,
+                                              };
+                                            });
                                           })
                                           .catch((err: unknown) => {
                                             setMaterialsErrorByUnitId((prev) => ({
@@ -955,16 +1222,80 @@ export default function CourseDetailPage() {
                               <Button
                                 variant="outline"
                                 className="border-zinc-900 bg-zinc-900 text-white hover:bg-zinc-800 hover:text-white"
-                                onClick={() => setError('Add assignment is not implemented yet')}
+                                onClick={() => {
+                                  setAssignmentsErrorByUnitId((prev) => ({ ...prev, [unit.id]: null }));
+                                  setAssignmentMessage(null);
+                                  setAssignmentTitle('');
+                                  setAssignmentDescription('');
+                                  setAssignmentDueDate('');
+                                  setAssignmentUnitId(unit.id);
+                                  setAssignmentOpen(true);
+                                }}
                               >
                                 <Plus className="mr-2 h-4 w-4" />
                                 Add Assignment
                               </Button>
                             )}
                           </div>
-                          <div className="rounded-xl border border-zinc-200 bg-white px-4 py-8 text-center text-sm text-zinc-600">
-                            No assignments yet.
-                          </div>
+
+                          {assignmentsErrorByUnitId[unit.id] && (
+                            <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+                              {assignmentsErrorByUnitId[unit.id]}
+                            </div>
+                          )}
+
+                          {assignmentsLoadingByUnitId[unit.id] && !assignmentsByUnitId[unit.id] && (
+                            <div className="rounded-xl border border-zinc-200 bg-white px-4 py-8 text-center text-sm text-zinc-600">
+                              Loading assignments...
+                            </div>
+                          )}
+
+                          {!!assignmentsByUnitId[unit.id]?.length && (
+                            <div className="divide-y divide-zinc-100 rounded-xl border border-zinc-200 bg-white">
+                              {assignmentsByUnitId[unit.id].map((a) => (
+                                <button
+                                  key={a.id}
+                                  type="button"
+                                  className="w-full px-4 py-3 text-left hover:bg-zinc-50"
+                                  onClick={() => {
+                                    if (!courseId) return;
+                                    const next = new URLSearchParams();
+                                    next.set('unitId', unit.id);
+                                    next.set('mode', mode);
+                                    router.push(
+                                      `/courses/${courseId}/assignments/${a.id}?${next.toString()}`,
+                                    );
+                                  }}
+                                >
+                                  <div className="flex items-start justify-between gap-3">
+                                    <div className="min-w-0">
+                                      <div className="truncate text-sm font-medium text-zinc-900">
+                                        {a.title}
+                                      </div>
+                                      <div className="mt-1 text-xs text-zinc-500">
+                                        {a.due_date
+                                          ? `Due ${new Date(a.due_date).toLocaleString()}`
+                                          : 'No due date'}
+                                      </div>
+                                    </div>
+                                  </div>
+                                  {a.description && (
+                                    <div className="mt-2 text-sm text-zinc-600 whitespace-pre-wrap">
+                                      {a.description}
+                                    </div>
+                                  )}
+                                </button>
+                              ))}
+                            </div>
+                          )}
+
+                          {!assignmentsLoadingByUnitId[unit.id] &&
+                            (!assignmentsByUnitId[unit.id] || assignmentsByUnitId[unit.id].length === 0) &&
+                            !assignmentsErrorByUnitId[unit.id] && (
+                              <div className="rounded-xl border border-zinc-200 bg-white px-4 py-8 text-center text-sm text-zinc-600">
+                                No assignments yet.
+                              </div>
+                            )}
                         </div>
                       )}
 

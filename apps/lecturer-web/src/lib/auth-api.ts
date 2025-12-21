@@ -537,3 +537,200 @@ export async function deleteDocument(documentId: string): Promise<void> {
     throw new Error(msg);
   }
 }
+
+export interface LearningUnitSummary {
+  unit_id: string;
+  material_count: number;
+  assignment_count: number;
+  quiz_count: number;
+}
+
+export async function getCourseLearningUnitSummaries(courseId: string): Promise<LearningUnitSummary[]> {
+  const response = await fetch(`${API_BASE_URL}/learning-units/courses/${courseId}/units/summary`, {
+    method: 'GET',
+    headers: {
+      Accept: 'application/json',
+      ...getAuthHeaders(),
+    },
+  });
+
+  const data = await response.json().catch(() => ({}));
+
+  if (!response.ok) {
+    const msg = data?.error || data?.message || 'Failed to fetch learning unit summaries';
+    throw new Error(msg);
+  }
+
+  if (Array.isArray(data?.summaries)) {
+    return data.summaries as LearningUnitSummary[];
+  }
+
+  return [];
+}
+
+export interface LearningUnitAssignment {
+  id: string;
+  learning_unit_id: string;
+  title: string;
+  description: string;
+  due_date: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export async function getLearningUnitAssignments(
+  unitId: string,
+  limit = 50,
+  offset = 0,
+): Promise<LearningUnitAssignment[]> {
+  const params = new URLSearchParams();
+  if (limit != null) params.set('limit', String(limit));
+  if (offset != null) params.set('offset', String(offset));
+
+  const response = await fetch(
+    `${API_BASE_URL}/learning-units/${unitId}/assignments${params.toString() ? `?${params.toString()}` : ''}`,
+    {
+      method: 'GET',
+      headers: {
+        Accept: 'application/json',
+        ...getAuthHeaders(),
+      },
+    },
+  );
+
+  const data = await response.json().catch(() => ({}));
+
+  if (!response.ok) {
+    const msg = data?.error || data?.message || 'Failed to fetch assignments';
+    throw new Error(msg);
+  }
+
+  if (Array.isArray(data?.assignments)) {
+    return data.assignments as LearningUnitAssignment[];
+  }
+
+  if (Array.isArray(data?.Assignments)) {
+    return data.Assignments as LearningUnitAssignment[];
+  }
+
+  return [];
+}
+
+export async function createLearningUnitAssignment(
+  unitId: string,
+  params: { title: string; description?: string; due_date?: string },
+): Promise<LearningUnitAssignment> {
+  const body: Record<string, unknown> = {
+    title: params.title,
+    description: params.description ?? '',
+  };
+  if (params.due_date) body.due_date = params.due_date;
+
+  const response = await fetch(`${API_BASE_URL}/learning-units/${unitId}/assignments`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Accept: 'application/json',
+      ...getAuthHeaders(),
+    },
+    body: JSON.stringify(body),
+  });
+
+  const data = await response.json().catch(() => ({}));
+
+  if (!response.ok) {
+    const msg = data?.error || data?.message || 'Failed to create assignment';
+    throw new Error(msg);
+  }
+
+  if (data?.assignment) {
+    return data.assignment as LearningUnitAssignment;
+  }
+
+  return data as LearningUnitAssignment;
+}
+
+export interface AssignmentSubmissionStudent {
+  id: string;
+  name: string;
+  email: string;
+  unique_identifier: string;
+}
+
+export interface AssignmentSubmission {
+  id: string;
+  assignment_id: string;
+  student_id: string;
+  file_path: string;
+  grade: string;
+  feedback: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface AssignmentSubmissionRow {
+  student: AssignmentSubmissionStudent;
+  submission: AssignmentSubmission | null;
+}
+
+export async function getAssignmentSubmissions(
+  unitId: string,
+  assignmentId: string,
+): Promise<{
+  unit_id: string;
+  assignment_id: string;
+  total_students: number;
+  submitted_count: number;
+  rows: AssignmentSubmissionRow[];
+}> {
+  const response = await fetch(
+    `${API_BASE_URL}/learning-units/${unitId}/assignments/${assignmentId}/submissions`,
+    {
+      method: 'GET',
+      headers: {
+        Accept: 'application/json',
+        ...getAuthHeaders(),
+      },
+    },
+  );
+
+  const data = await response.json().catch(() => ({}));
+
+  if (!response.ok) {
+    const msg = data?.error || data?.message || 'Failed to fetch submissions';
+    throw new Error(msg);
+  }
+
+  return data as {
+    unit_id: string;
+    assignment_id: string;
+    total_students: number;
+    submitted_count: number;
+    rows: AssignmentSubmissionRow[];
+  };
+}
+
+export async function downloadSubmissionPDF(params: {
+  unitId: string;
+  assignmentId: string;
+  submissionId: string;
+}): Promise<Blob> {
+  const response = await fetch(
+    `${API_BASE_URL}/learning-units/${params.unitId}/assignments/${params.assignmentId}/submissions/${params.submissionId}/download`,
+    {
+      method: 'GET',
+      headers: {
+        Accept: 'application/pdf',
+        ...getAuthHeaders(),
+      },
+    },
+  );
+
+  if (!response.ok) {
+    const data = await response.json().catch(() => ({}));
+    const msg = data?.error || data?.message || 'Failed to download submission';
+    throw new Error(msg);
+  }
+
+  return await response.blob();
+}
