@@ -2,6 +2,7 @@ package services
 
 import (
 	"fmt"
+	"time"
 
 	"github.com/google/uuid"
 	"lay.ai/backend/internal/models"
@@ -35,12 +36,15 @@ func (s *AssignmentService) CreateAssignment(learningUnitID, title, description 
 		LearningUnitID: uuid.MustParse(learningUnitID),
 		Title:          title,
 		Description:    description,
+		DueDate:        nil,
 	}
 
-	// Parse due date if provided
-	if dueDate != nil && *dueDate != "" {
-		// Note: In a real implementation, you'd parse the date string
-		// For now, we'll let the store handle this
+	if dueDate != nil {
+		parsed, err := time.Parse(time.RFC3339, *dueDate)
+		if err != nil {
+			return nil, fmt.Errorf("invalid due date: %w", err)
+		}
+		assignment.DueDate = &parsed
 	}
 
 	// Save to database

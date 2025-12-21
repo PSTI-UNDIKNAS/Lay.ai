@@ -54,7 +54,16 @@ func SetupRoutes(db *pgxpool.Pool) *gin.Engine {
 		submissionService,
 	)
 	courseHandler := handlers.NewCourseHandler(courseService)
-	learningUnitHandler := handlers.NewLearningUnitHandler(learningUnitService, courseService)
+	learningUnitHandler := handlers.NewLearningUnitHandler(
+		learningUnitService,
+		courseService,
+		assignmentService,
+		aiService,
+		enrollmentStore,
+		assignmentStore,
+		documentStore,
+		quizStore,
+	)
 	progressHandler := handlers.NewProgressHandler(
 		courseService,
 		learningUnitService,
@@ -145,9 +154,14 @@ func SetupRoutes(db *pgxpool.Pool) *gin.Engine {
 		learningUnits.Use(middleware.AuthWithStatusMiddleware(authService))
 		{
 			learningUnits.GET("/courses/:courseId/units/manage", middleware.LecturerOnlyMiddleware(authService), middleware.CourseOwnershipMiddleware(courseService), learningUnitHandler.GetLearningUnits)
+			learningUnits.GET("/courses/:courseId/units/summary", middleware.LecturerOnlyMiddleware(authService), middleware.CourseOwnershipMiddleware(courseService), learningUnitHandler.GetLearningUnitSummaries)
 			learningUnits.POST("/courses/:courseId/units", middleware.LecturerOnlyMiddleware(authService), middleware.CourseOwnershipMiddleware(courseService), learningUnitHandler.CreateLearningUnit)
 			learningUnits.PUT("/:unitId", middleware.LecturerOnlyMiddleware(authService), learningUnitHandler.UpdateLearningUnit)
 			learningUnits.DELETE("/:unitId", middleware.LecturerOnlyMiddleware(authService), learningUnitHandler.DeleteLearningUnit)
+			learningUnits.GET("/:unitId/assignments", middleware.LecturerOnlyMiddleware(authService), learningUnitHandler.GetAssignments)
+			learningUnits.POST("/:unitId/assignments", middleware.LecturerOnlyMiddleware(authService), learningUnitHandler.CreateAssignment)
+			learningUnits.GET("/:unitId/assignments/:assignmentId/submissions", middleware.LecturerOnlyMiddleware(authService), learningUnitHandler.GetAssignmentSubmissions)
+			learningUnits.GET("/:unitId/assignments/:assignmentId/submissions/:submissionId/download", middleware.LecturerOnlyMiddleware(authService), learningUnitHandler.DownloadSubmission)
 
 			learningUnits.GET("/courses/:courseId/units", middleware.StudentOnlyMiddleware(authService), middleware.EnrollmentRequiredMiddleware(enrollmentStore), learningUnitHandler.GetLearningUnits)
 			learningUnits.GET("/:unitId", middleware.StudentOnlyMiddleware(authService), learningUnitHandler.GetLearningUnitByID)
