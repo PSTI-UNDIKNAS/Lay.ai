@@ -4,36 +4,33 @@ import { useEffect, useMemo, useState } from 'react';
 import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import LecturerShell from '@/components/lecturer/LecturerShell';
 import Card from '@/components/lecturer/Card';
-import { Button } from '@/components/ui/button';
-import { ArrowLeft, FileText, Users } from 'lucide-react';
+import { ArrowLeft, Users } from 'lucide-react';
 import {
-  AssignmentSubmissionRow,
-  downloadSubmissionPDF,
-  getAssignmentSubmissions,
-  getLearningUnitAssignments,
-  LearningUnitAssignment,
+  getLearningUnitQuizzes,
+  getQuizAttempts,
+  LearningUnitQuiz,
+  QuizAttemptRow,
 } from '@/lib/auth-api';
 
-export default function AssignmentSubmissionsPage() {
-  const params = useParams<{ courseId: string; assignmentId: string }>();
+export default function QuizAttemptsPage() {
+  const params = useParams<{ courseId: string; quizId: string }>();
   const router = useRouter();
   const searchParams = useSearchParams();
 
   const courseId = params?.courseId;
-  const assignmentId = params?.assignmentId;
+  const quizId = params?.quizId;
   const unitId = searchParams?.get('unitId') ?? '';
   const mode = searchParams?.get('mode') ?? 'edit';
 
-  const [assignment, setAssignment] = useState<LearningUnitAssignment | null>(null);
-  const [rows, setRows] = useState<AssignmentSubmissionRow[]>([]);
+  const [quiz, setQuiz] = useState<LearningUnitQuiz | null>(null);
+  const [rows, setRows] = useState<QuizAttemptRow[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [downloadingSubmissionId, setDownloadingSubmissionId] = useState<string | null>(null);
 
   const displayError = !unitId ? 'Missing learning unit id' : error;
 
   useEffect(() => {
-    if (!assignmentId) return;
+    if (!quizId) return;
     if (!unitId) return;
 
     let mounted = true;
@@ -43,19 +40,16 @@ export default function AssignmentSubmissionsPage() {
       setError(null);
     });
 
-    Promise.all([
-      getLearningUnitAssignments(unitId, 200, 0),
-      getAssignmentSubmissions(unitId, assignmentId),
-    ])
-      .then(([assignments, submissions]) => {
+    Promise.all([getLearningUnitQuizzes(unitId, 200, 0), getQuizAttempts(unitId, quizId)])
+      .then(([quizzes, attempts]) => {
         if (!mounted) return;
-        const found = assignments.find((a) => a.id === assignmentId) ?? null;
-        setAssignment(found);
-        setRows(submissions.rows ?? []);
+        const found = quizzes.find((q) => q.id === quizId) ?? null;
+        setQuiz(found);
+        setRows(attempts.rows ?? []);
       })
       .catch((err: unknown) => {
         if (!mounted) return;
-        setError(err instanceof Error ? err.message : 'Failed to load submissions');
+        setError(err instanceof Error ? err.message : 'Failed to load quiz attempts');
       })
       .finally(() => {
         if (!mounted) return;
@@ -65,17 +59,10 @@ export default function AssignmentSubmissionsPage() {
     return () => {
       mounted = false;
     };
-  }, [assignmentId, unitId]);
+  }, [quizId, unitId]);
 
-  const submitted = useMemo(
-    () => rows.filter((r) => !!r.submission),
-    [rows],
-  );
-
-  const notSubmitted = useMemo(
-    () => rows.filter((r) => !r.submission),
-    [rows],
-  );
+  const attempted = useMemo(() => rows.filter((r) => !!r.attempt), [rows]);
+  const notAttempted = useMemo(() => rows.filter((r) => !r.attempt), [rows]);
 
   return (
     <LecturerShell>
@@ -92,12 +79,10 @@ export default function AssignmentSubmissionsPage() {
 
           <div className="space-y-2">
             <h1 className="text-2xl font-semibold text-zinc-900">
-              {assignment?.title || 'Assignment'}
+              {quiz?.title || 'Quiz'}
             </h1>
             <div className="text-sm text-zinc-600">
-              {assignment?.due_date
-                ? `Due ${new Date(assignment.due_date).toLocaleString()}`
-                : 'No due date'}
+              {attempted.length} attempted · {notAttempted.length} pending
             </div>
           </div>
         </div>
@@ -111,24 +96,20 @@ export default function AssignmentSubmissionsPage() {
 
           {loading && (
             <div className="rounded-xl border border-zinc-200 bg-white px-5 py-4 text-sm text-zinc-600">
-              Loading submissions...
+              Loading quiz attempts...
             </div>
           )}
 
           {!loading && (
             <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-              <Card
-                title={`Submitted (${submitted.length})`}
-                className="overflow-hidden"
-                bodyClassName="p-0"
-              >
-                {submitted.length === 0 ? (
+              <Card title={`Attempted (${attempted.length})`} className="overflow-hidden" bodyClassName="p-0">
+                {attempted.length === 0 ? (
                   <div className="px-4 py-8 text-center text-sm text-zinc-600">
-                    No submissions yet.
+                    No attempts yet.
                   </div>
                 ) : (
                   <div className="divide-y divide-zinc-100">
-                    {submitted.map((r) => (
+                    {attempted.map((r) => (
                       <div key={r.student.id} className="flex items-center justify-between gap-3 px-4 py-3">
                         <div className="min-w-0">
                           <div className="truncate text-sm font-medium text-zinc-900">
@@ -137,59 +118,27 @@ export default function AssignmentSubmissionsPage() {
                           <div className="mt-1 text-xs text-zinc-500 truncate">
                             {r.student.email}
                           </div>
-                          <div className="mt-1 text-xs text-zinc-500">
-                            Submitted {new Date(r.submission!.created_at).toLocaleString()}
-                          </div>
+                          {r.attempt && (
+                            <div className="mt-1 text-xs text-zinc-500">
+                              Attempt #{r.attempt.attempt_no} · Score {r.attempt.score}/{r.attempt.max_score} ·{' '}
+                              {new Date(r.attempt.created_at).toLocaleString()}
+                            </div>
+                          )}
                         </div>
-
-                        <Button
-                          variant="outline"
-                          onClick={() => {
-                            if (!r.submission) return;
-                            if (!unitId || !assignmentId) return;
-                            if (downloadingSubmissionId) return;
-                            setDownloadingSubmissionId(r.submission.id);
-                            setError(null);
-                            downloadSubmissionPDF({
-                              unitId,
-                              assignmentId,
-                              submissionId: r.submission.id,
-                            })
-                              .then((blob) => {
-                                const blobUrl = URL.createObjectURL(blob);
-                                window.open(blobUrl, '_blank', 'noopener,noreferrer');
-                                window.setTimeout(() => URL.revokeObjectURL(blobUrl), 60_000);
-                              })
-                              .catch((err: unknown) => {
-                                setError(
-                                  err instanceof Error ? err.message : 'Failed to open submission',
-                                );
-                              })
-                              .finally(() => setDownloadingSubmissionId(null));
-                          }}
-                          disabled={downloadingSubmissionId === r.submission!.id}
-                        >
-                          <FileText className="mr-2 h-4 w-4" />
-                          {downloadingSubmissionId === r.submission!.id ? 'Opening...' : 'View'}
-                        </Button>
                       </div>
                     ))}
                   </div>
                 )}
               </Card>
 
-              <Card
-                title={`Not Submitted (${notSubmitted.length})`}
-                className="overflow-hidden"
-                bodyClassName="p-0"
-              >
-                {notSubmitted.length === 0 ? (
+              <Card title={`Not Attempted (${notAttempted.length})`} className="overflow-hidden" bodyClassName="p-0">
+                {notAttempted.length === 0 ? (
                   <div className="px-4 py-8 text-center text-sm text-zinc-600">
-                    Everyone submitted.
+                    Everyone attempted.
                   </div>
                 ) : (
                   <div className="divide-y divide-zinc-100">
-                    {notSubmitted.map((r) => (
+                    {notAttempted.map((r) => (
                       <div key={r.student.id} className="flex items-center justify-between gap-3 px-4 py-3">
                         <div className="min-w-0">
                           <div className="truncate text-sm font-medium text-zinc-900">

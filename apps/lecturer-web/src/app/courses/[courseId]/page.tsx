@@ -24,15 +24,24 @@ import {
   LearningUnit,
   LearningUnitAssignment,
   LearningUnitDocument,
+  LearningUnitQuiz,
+  QuizData,
+  QuizQuestion,
   createLearningUnitAssignment,
+  createLearningUnitQuiz,
+  deleteLearningUnitAssignment,
+  deleteLearningUnitQuiz,
   getCourseLearningUnits,
   getCourseLearningUnitSummaries,
   getLearningUnitAssignments,
   getLearningUnitDocuments,
+  getLearningUnitQuizzes,
   getMyCourses,
   createLearningUnit,
+  updateLearningUnitAssignment,
   updateLearningUnit,
   updateCourse,
+  updateLearningUnitQuiz,
   deleteDocument,
   downloadDocumentPDF,
   ingestPDF,
@@ -94,6 +103,7 @@ export default function CourseDetailPage() {
 
   const [assignmentOpen, setAssignmentOpen] = useState(false);
   const [assignmentUnitId, setAssignmentUnitId] = useState<string | null>(null);
+  const [editingAssignmentId, setEditingAssignmentId] = useState<string | null>(null);
   const [assignmentTitle, setAssignmentTitle] = useState('');
   const [assignmentDescription, setAssignmentDescription] = useState('');
   const [assignmentDueDate, setAssignmentDueDate] = useState('');
@@ -104,9 +114,24 @@ export default function CourseDetailPage() {
   const [assignmentsLoadingByUnitId, setAssignmentsLoadingByUnitId] = useState<Record<string, boolean>>({});
   const [assignmentsErrorByUnitId, setAssignmentsErrorByUnitId] = useState<Record<string, string | null>>({});
 
+  const [quizzesByUnitId, setQuizzesByUnitId] = useState<Record<string, LearningUnitQuiz[]>>({});
+  const [quizzesLoadingByUnitId, setQuizzesLoadingByUnitId] = useState<Record<string, boolean>>({});
+  const [quizzesErrorByUnitId, setQuizzesErrorByUnitId] = useState<Record<string, string | null>>({});
+
   const [unitSummaryByUnitId, setUnitSummaryByUnitId] = useState<
     Record<string, { materialCount: number; assignmentCount: number; quizCount: number }>
   >({});
+
+  const [quizOpen, setQuizOpen] = useState(false);
+  const [quizUnitId, setQuizUnitId] = useState<string | null>(null);
+  const [editingQuizId, setEditingQuizId] = useState<string | null>(null);
+  const [quizTitle, setQuizTitle] = useState('');
+  const [quizTimeLimit, setQuizTimeLimit] = useState<number>(10);
+  const [quizQuestions, setQuizQuestions] = useState<QuizQuestion[]>([]);
+  const [selectedQuestionId, setSelectedQuestionId] = useState<string | null>(null);
+  const [quizSaving, setQuizSaving] = useState(false);
+  const [quizMessage, setQuizMessage] = useState<string | null>(null);
+  const [quizModalError, setQuizModalError] = useState<string | null>(null);
 
   const { getRootProps, getInputProps, isDragActive } = useDropzone({
     accept: { 'application/pdf': ['.pdf'] },
@@ -190,6 +215,35 @@ export default function CourseDetailPage() {
     }
   }
 
+  async function loadQuizzes(unitId: string) {
+    setQuizzesLoadingByUnitId((prev) => ({ ...prev, [unitId]: true }));
+    setQuizzesErrorByUnitId((prev) => ({ ...prev, [unitId]: null }));
+    try {
+      const quizzes = await getLearningUnitQuizzes(unitId, 100, 0);
+      setQuizzesByUnitId((prev) => ({ ...prev, [unitId]: quizzes }));
+      setUnitSummaryByUnitId((prev) => {
+        const current = prev[unitId];
+        return {
+          ...prev,
+          [unitId]: {
+            materialCount: current?.materialCount ?? 0,
+            assignmentCount: current?.assignmentCount ?? 0,
+            quizCount: quizzes.length,
+          },
+        };
+      });
+      return quizzes;
+    } catch (err) {
+      setQuizzesErrorByUnitId((prev) => ({
+        ...prev,
+        [unitId]: err instanceof Error ? err.message : 'Failed to load quizzes',
+      }));
+      return null;
+    } finally {
+      setQuizzesLoadingByUnitId((prev) => ({ ...prev, [unitId]: false }));
+    }
+  }
+
   useEffect(() => {
     if (!openUnitId) return;
     if (activeTab !== 'materials') return;
@@ -205,6 +259,28 @@ export default function CourseDetailPage() {
     if (assignmentsLoadingByUnitId[openUnitId]) return;
     void loadAssignments(openUnitId);
   }, [activeTab, openUnitId, assignmentsByUnitId, assignmentsLoadingByUnitId]);
+
+  useEffect(() => {
+    if (!openUnitId) return;
+    if (activeTab !== 'quizzes') return;
+    if (quizzesByUnitId[openUnitId]) return;
+    if (quizzesLoadingByUnitId[openUnitId]) return;
+    void loadQuizzes(openUnitId);
+  }, [activeTab, openUnitId, quizzesByUnitId, quizzesLoadingByUnitId]);
+
+  useEffect(() => {
+    if (!quizOpen) return;
+    if (quizQuestions.length === 0) {
+      if (selectedQuestionId) setSelectedQuestionId(null);
+      return;
+    }
+    const stillExists = selectedQuestionId
+      ? quizQuestions.some((q) => q.id === selectedQuestionId)
+      : false;
+    if (!selectedQuestionId || !stillExists) {
+      setSelectedQuestionId(quizQuestions[0].id);
+    }
+  }, [quizOpen, quizQuestions, selectedQuestionId]);
 
   useEffect(() => {
     if (!courseId) return;
@@ -420,6 +496,19 @@ export default function CourseDetailPage() {
     }
   }
 
+  function formatDatetimeLocal(isoValue: string | null | undefined) {
+    if (!isoValue) return '';
+    try {
+      const date = new Date(isoValue);
+      const pad = (n: number) => String(n).padStart(2, '0');
+      return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(
+        date.getHours(),
+      )}:${pad(date.getMinutes())}`;
+    } catch {
+      return '';
+    }
+  }
+
   async function handleCreateAssignment() {
     if (!assignmentUnitId) return;
     if (!assignmentTitle.trim()) return;
@@ -466,6 +555,335 @@ export default function CourseDetailPage() {
       }));
     } finally {
       setAssignmentSaving(false);
+    }
+  }
+
+  async function handleSaveAssignment() {
+    if (!assignmentUnitId || !editingAssignmentId) return;
+    if (!assignmentTitle.trim()) return;
+    setAssignmentSaving(true);
+    setAssignmentMessage(null);
+    setAssignmentsErrorByUnitId((prev) => ({ ...prev, [assignmentUnitId]: null }));
+
+    const dueDateValue = assignmentDueDate.trim()
+      ? new Date(assignmentDueDate).toISOString()
+      : '';
+
+    try {
+      const updated = await updateLearningUnitAssignment(assignmentUnitId, editingAssignmentId, {
+        title: assignmentTitle.trim(),
+        description: assignmentDescription,
+        due_date: dueDateValue,
+      });
+
+      setAssignmentsByUnitId((prev) => {
+        const next = (prev[assignmentUnitId] ?? []).map((a) =>
+          a.id === updated.id ? updated : a,
+        );
+        return { ...prev, [assignmentUnitId]: next };
+      });
+
+      setAssignmentMessage('Assignment updated successfully.');
+      setAssignmentOpen(false);
+      setAssignmentUnitId(null);
+      setEditingAssignmentId(null);
+      setAssignmentTitle('');
+      setAssignmentDescription('');
+      setAssignmentDueDate('');
+    } catch (err) {
+      setAssignmentsErrorByUnitId((prev) => ({
+        ...prev,
+        [assignmentUnitId]:
+          err instanceof Error ? err.message : 'Failed to update assignment',
+      }));
+    } finally {
+      setAssignmentSaving(false);
+    }
+  }
+
+  async function handleDeleteAssignment(params: { unitId: string; assignmentId: string }) {
+    const ok = window.confirm('Delete this assignment?');
+    if (!ok) return;
+    setAssignmentsErrorByUnitId((prev) => ({ ...prev, [params.unitId]: null }));
+    try {
+      await deleteLearningUnitAssignment(params.unitId, params.assignmentId);
+      setAssignmentsByUnitId((prev) => {
+        const next = (prev[params.unitId] ?? []).filter((a) => a.id !== params.assignmentId);
+        return { ...prev, [params.unitId]: next };
+      });
+      setUnitSummaryByUnitId((prev) => {
+        const current = prev[params.unitId];
+        if (!current) return prev;
+        return {
+          ...prev,
+          [params.unitId]: {
+            ...current,
+            assignmentCount: Math.max(0, current.assignmentCount - 1),
+          },
+        };
+      });
+    } catch (err) {
+      setAssignmentsErrorByUnitId((prev) => ({
+        ...prev,
+        [params.unitId]:
+          err instanceof Error ? err.message : 'Failed to delete assignment',
+      }));
+    }
+  }
+
+  function makeClientId() {
+    try {
+      if (typeof crypto !== 'undefined' && 'randomUUID' in crypto) {
+        return crypto.randomUUID();
+      }
+    } catch {}
+    return `${Date.now()}-${Math.random().toString(16).slice(2)}`;
+  }
+
+  function makeBlankQuestion(): QuizQuestion {
+    return {
+      id: makeClientId(),
+      question: '',
+      options: ['', '', '', ''],
+      answer: '',
+      points: 1,
+    };
+  }
+
+  function updateQuestion(questionId: string, patch: Partial<QuizQuestion>) {
+    setQuizQuestions((prev) => prev.map((q) => (q.id === questionId ? { ...q, ...patch } : q)));
+  }
+
+  function updateQuestionOption(questionId: string, optionIndex: number, value: string) {
+    setQuizQuestions((prev) =>
+      prev.map((q) => {
+        if (q.id !== questionId) return q;
+        const nextOptions = [...(q.options ?? [])];
+        nextOptions[optionIndex] = value;
+        const normalizedAnswer = (q.answer ?? '').trim();
+        const normalizedOptions = nextOptions.map((o) => o.trim()).filter((o) => !!o);
+        const answer = normalizedOptions.includes(normalizedAnswer) ? normalizedAnswer : '';
+        return { ...q, options: nextOptions, answer };
+      }),
+    );
+  }
+
+  function addOption(questionId: string) {
+    setQuizQuestions((prev) =>
+      prev.map((q) => (q.id === questionId ? { ...q, options: [...q.options, ''] } : q)),
+    );
+  }
+
+  function removeOption(questionId: string, optionIndex: number) {
+    setQuizQuestions((prev) =>
+      prev.map((q) => {
+        if (q.id !== questionId) return q;
+        if (q.options.length <= 2) return q;
+        const nextOptions = q.options.filter((_, idx) => idx !== optionIndex);
+        const normalizedAnswer = (q.answer ?? '').trim();
+        const normalizedOptions = nextOptions.map((o) => o.trim()).filter((o) => !!o);
+        const answer = normalizedOptions.includes(normalizedAnswer) ? normalizedAnswer : '';
+        return { ...q, options: nextOptions, answer };
+      }),
+    );
+  }
+
+  function removeQuestion(questionId: string) {
+    setQuizQuestions((prev) => {
+      const next = prev.filter((q) => q.id !== questionId);
+      if (selectedQuestionId === questionId) {
+        setSelectedQuestionId(next[0]?.id ?? null);
+      }
+      return next;
+    });
+  }
+
+  async function handleCreateQuiz() {
+    if (!quizUnitId) return;
+    if (!quizTitle.trim()) return;
+
+    const normalizedQuestions: QuizQuestion[] = quizQuestions.map((q) => {
+      const options = (q.options ?? [])
+        .map((o) => o.trim())
+        .filter((o) => !!o);
+      const points = Number.isFinite(Number(q.points)) ? Math.max(1, Math.floor(Number(q.points))) : 1;
+      const question = q.question?.trim() ?? '';
+      const id = q.id?.trim() ? q.id.trim() : makeClientId();
+      const answer = q.answer?.trim() ?? '';
+      return { id, question, options, answer, points };
+    });
+
+    if (normalizedQuestions.length === 0) {
+      setQuizModalError('Add at least one question.');
+      return;
+    }
+
+    for (const q of normalizedQuestions) {
+      if (!q.question) {
+        setQuizModalError('Each question must have text.');
+        return;
+      }
+      if (q.options.length < 2) {
+        setQuizModalError('Each question must have at least two options.');
+        return;
+      }
+      if (!q.answer || !q.options.includes(q.answer)) {
+        setQuizModalError('Each question must have a valid correct answer.');
+        return;
+      }
+    }
+
+    const timeLimit =
+      Number.isFinite(Number(quizTimeLimit)) ? Math.max(1, Math.floor(Number(quizTimeLimit))) : 10;
+
+    const payload: QuizData = {
+      questions: normalizedQuestions,
+      time_limit: timeLimit,
+    };
+
+    setQuizSaving(true);
+    setQuizModalError(null);
+    setQuizMessage(null);
+    setQuizzesErrorByUnitId((prev) => ({ ...prev, [quizUnitId]: null }));
+    try {
+      const created = await createLearningUnitQuiz(quizUnitId, {
+        title: quizTitle.trim(),
+        quiz_data: payload,
+      });
+
+      setQuizzesByUnitId((prev) => ({
+        ...prev,
+        [quizUnitId]: [created, ...(prev[quizUnitId] ?? [])],
+      }));
+      setUnitSummaryByUnitId((prev) => {
+        const current = prev[quizUnitId];
+        return {
+          ...prev,
+          [quizUnitId]: {
+            materialCount: current?.materialCount ?? 0,
+            assignmentCount: current?.assignmentCount ?? 0,
+            quizCount: (current?.quizCount ?? 0) + 1,
+          },
+        };
+      });
+
+      setQuizMessage('Quiz created successfully.');
+      setQuizTitle('');
+      setQuizTimeLimit(10);
+      setQuizQuestions([]);
+      setSelectedQuestionId(null);
+      setQuizOpen(false);
+      setQuizUnitId(null);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Failed to create quiz';
+      setQuizModalError(msg);
+      setQuizzesErrorByUnitId((prev) => ({ ...prev, [quizUnitId]: msg }));
+    } finally {
+      setQuizSaving(false);
+    }
+  }
+
+  async function handleSaveQuiz() {
+    if (!quizUnitId || !editingQuizId) return;
+    if (!quizTitle.trim()) return;
+
+    const normalizedQuestions: QuizQuestion[] = quizQuestions.map((q) => {
+      const options = (q.options ?? [])
+        .map((o) => o.trim())
+        .filter((o) => !!o);
+      const points = Number.isFinite(Number(q.points)) ? Math.max(1, Math.floor(Number(q.points))) : 1;
+      const question = q.question?.trim() ?? '';
+      const id = q.id?.trim() ? q.id.trim() : makeClientId();
+      const answer = q.answer?.trim() ?? '';
+      return { id, question, options, answer, points };
+    });
+
+    if (normalizedQuestions.length === 0) {
+      setQuizModalError('Add at least one question.');
+      return;
+    }
+
+    for (const q of normalizedQuestions) {
+      if (!q.question) {
+        setQuizModalError('Each question must have text.');
+        return;
+      }
+      if (q.options.length < 2) {
+        setQuizModalError('Each question must have at least two options.');
+        return;
+      }
+      if (!q.answer || !q.options.includes(q.answer)) {
+        setQuizModalError('Each question must have a valid correct answer.');
+        return;
+      }
+    }
+
+    const timeLimit =
+      Number.isFinite(Number(quizTimeLimit)) ? Math.max(1, Math.floor(Number(quizTimeLimit))) : 10;
+
+    const payload: QuizData = {
+      questions: normalizedQuestions,
+      time_limit: timeLimit,
+    };
+
+    setQuizSaving(true);
+    setQuizModalError(null);
+    setQuizMessage(null);
+    setQuizzesErrorByUnitId((prev) => ({ ...prev, [quizUnitId]: null }));
+    try {
+      const updated = await updateLearningUnitQuiz(quizUnitId, editingQuizId, {
+        title: quizTitle.trim(),
+        quiz_data: payload,
+      });
+
+      setQuizzesByUnitId((prev) => {
+        const next = (prev[quizUnitId] ?? []).map((q) => (q.id === updated.id ? updated : q));
+        return { ...prev, [quizUnitId]: next };
+      });
+
+      setQuizMessage('Quiz updated successfully.');
+      setQuizTitle('');
+      setQuizTimeLimit(10);
+      setQuizQuestions([]);
+      setSelectedQuestionId(null);
+      setQuizOpen(false);
+      setQuizUnitId(null);
+      setEditingQuizId(null);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Failed to update quiz';
+      setQuizModalError(msg);
+      setQuizzesErrorByUnitId((prev) => ({ ...prev, [quizUnitId]: msg }));
+    } finally {
+      setQuizSaving(false);
+    }
+  }
+
+  async function handleDeleteQuiz(params: { unitId: string; quizId: string }) {
+    const ok = window.confirm('Delete this quiz?');
+    if (!ok) return;
+    setQuizzesErrorByUnitId((prev) => ({ ...prev, [params.unitId]: null }));
+    try {
+      await deleteLearningUnitQuiz(params.unitId, params.quizId);
+      setQuizzesByUnitId((prev) => {
+        const next = (prev[params.unitId] ?? []).filter((q) => q.id !== params.quizId);
+        return { ...prev, [params.unitId]: next };
+      });
+      setUnitSummaryByUnitId((prev) => {
+        const current = prev[params.unitId];
+        if (!current) return prev;
+        return {
+          ...prev,
+          [params.unitId]: {
+            ...current,
+            quizCount: Math.max(0, current.quizCount - 1),
+          },
+        };
+      });
+    } catch (err) {
+      setQuizzesErrorByUnitId((prev) => ({
+        ...prev,
+        [params.unitId]: err instanceof Error ? err.message : 'Failed to delete quiz',
+      }));
     }
   }
 
@@ -849,6 +1267,7 @@ export default function CourseDetailPage() {
                 if (assignmentSaving) return;
                 setAssignmentOpen(false);
                 setAssignmentUnitId(null);
+                setEditingAssignmentId(null);
                 setAssignmentTitle('');
                 setAssignmentDescription('');
                 setAssignmentDueDate('');
@@ -857,7 +1276,7 @@ export default function CourseDetailPage() {
             />
             <div className="absolute inset-0 flex items-center justify-center p-4">
               <Card
-                title="Add Assignment"
+                title={editingAssignmentId ? 'Edit Assignment' : 'Add Assignment'}
                 className="w-full max-w-xl"
                 bodyClassName="space-y-4"
               >
@@ -911,6 +1330,7 @@ export default function CourseDetailPage() {
                       if (assignmentSaving) return;
                       setAssignmentOpen(false);
                       setAssignmentUnitId(null);
+                      setEditingAssignmentId(null);
                       setAssignmentTitle('');
                       setAssignmentDescription('');
                       setAssignmentDueDate('');
@@ -922,10 +1342,301 @@ export default function CourseDetailPage() {
                   </Button>
                   <Button
                     variant="outline"
-                    onClick={handleCreateAssignment}
+                    onClick={editingAssignmentId ? handleSaveAssignment : handleCreateAssignment}
                     disabled={assignmentSaving || !assignmentTitle.trim()}
                   >
-                    {assignmentSaving ? 'Creating...' : 'Create'}
+                    {assignmentSaving
+                      ? editingAssignmentId
+                        ? 'Saving...'
+                        : 'Creating...'
+                      : editingAssignmentId
+                        ? 'Save'
+                        : 'Create'}
+                  </Button>
+                </div>
+              </Card>
+            </div>
+          </div>
+        )}
+
+        {isEditMode && quizOpen && (
+          <div className="fixed inset-0 z-50">
+            <div
+              className="absolute inset-0 bg-black/50"
+              onClick={() => {
+                if (quizSaving) return;
+                setQuizOpen(false);
+                setQuizUnitId(null);
+                setEditingQuizId(null);
+                setQuizTitle('');
+                setQuizTimeLimit(10);
+                setQuizQuestions([]);
+                setSelectedQuestionId(null);
+                setQuizMessage(null);
+                setQuizModalError(null);
+              }}
+            />
+            <div className="absolute inset-0 flex items-center justify-center p-4">
+              <Card
+                title={editingQuizId ? 'Edit Quiz' : 'Add Quiz'}
+                className="w-full max-w-3xl"
+                bodyClassName="space-y-4"
+              >
+                {quizMessage && (
+                  <div className="rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-700">
+                    {quizMessage}
+                  </div>
+                )}
+
+                {quizModalError && (
+                  <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+                    {quizModalError}
+                  </div>
+                )}
+
+                <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                  <div className="space-y-2">
+                    <div className="text-xs font-medium uppercase tracking-wide text-zinc-500">
+                      Title
+                    </div>
+                    <Input
+                      value={quizTitle}
+                      onChange={(e) => setQuizTitle(e.target.value)}
+                      disabled={quizSaving}
+                    />
+                  </div>
+
+                  <div className="space-y-2">
+                    <div className="text-xs font-medium uppercase tracking-wide text-zinc-500">
+                      Time Limit (minutes)
+                    </div>
+                    <Input
+                      type="number"
+                      min={1}
+                      value={quizTimeLimit}
+                      onChange={(e) => setQuizTimeLimit(Number(e.target.value) || 1)}
+                      disabled={quizSaving}
+                    />
+                  </div>
+                </div>
+
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between">
+                    <div className="text-sm font-semibold text-zinc-900">
+                      Questions
+                    </div>
+                    <Button
+                      variant="outline"
+                      onClick={() => {
+                        setQuizModalError(null);
+                        const next = makeBlankQuestion();
+                        setQuizQuestions((prev) => [...prev, next]);
+                        setSelectedQuestionId(next.id);
+                      }}
+                      disabled={quizSaving}
+                    >
+                      <Plus className="mr-2 h-4 w-4" />
+                      Add Question
+                    </Button>
+                  </div>
+
+                  {quizQuestions.length === 0 ? (
+                    <div className="rounded-xl border border-zinc-200 bg-white px-4 py-8 text-center text-sm text-zinc-600">
+                      No questions added yet.
+                    </div>
+                  ) : (
+                    <div className="grid grid-cols-1 gap-4 lg:grid-cols-[18rem_1fr]">
+                      <div className="rounded-xl border border-zinc-200 bg-white overflow-hidden">
+                        <div className="border-b border-zinc-200 bg-zinc-50 px-4 py-3 text-xs font-medium uppercase tracking-wide text-zinc-500">
+                          Question List
+                        </div>
+                        <div className="max-h-[22rem] overflow-y-auto divide-y divide-zinc-100">
+                          {quizQuestions.map((q, idx) => {
+                            const isActive = q.id === selectedQuestionId;
+                            const title = q.question.trim() ? q.question.trim() : 'Untitled question';
+                            return (
+                              <button
+                                key={q.id}
+                                type="button"
+                                className={`w-full px-4 py-3 text-left hover:bg-zinc-50 ${isActive ? 'bg-zinc-50' : 'bg-white'}`}
+                                onClick={() => setSelectedQuestionId(q.id)}
+                                disabled={quizSaving}
+                              >
+                                <div className="flex items-start justify-between gap-3">
+                                  <div className="min-w-0">
+                                    <div className="truncate text-sm font-medium text-zinc-900">
+                                      {`Q${idx + 1}: ${title}`}
+                                    </div>
+                                    <div className="mt-1 text-xs text-zinc-500">
+                                      {q.points ?? 1} pts • {(q.options?.filter((o) => o.trim()).length ?? 0)} options
+                                    </div>
+                                  </div>
+                                  <div className={`mt-1 h-2 w-2 shrink-0 rounded-full ${isActive ? 'bg-zinc-900' : 'bg-zinc-200'}`} />
+                                </div>
+                              </button>
+                            );
+                          })}
+                        </div>
+                      </div>
+
+                      <div className="rounded-xl border border-zinc-200 bg-white p-4 space-y-4">
+                        {(() => {
+                          const q = quizQuestions.find((x) => x.id === selectedQuestionId) ?? null;
+                          if (!q) {
+                            return (
+                              <div className="rounded-lg border border-zinc-200 bg-zinc-50 px-4 py-10 text-center text-sm text-zinc-600">
+                                Select a question to edit.
+                              </div>
+                            );
+                          }
+
+                          const nonEmptyOptions = q.options.map((o) => o.trim()).filter((o) => !!o);
+                          const uniqueOptions = Array.from(new Set(nonEmptyOptions));
+
+                          return (
+                            <>
+                              <div className="flex items-start justify-between gap-3">
+                                <div className="text-sm font-semibold text-zinc-900">
+                                  Edit Question
+                                </div>
+                                <Button
+                                  variant="outline"
+                                  onClick={() => removeQuestion(q.id)}
+                                  disabled={quizSaving || quizQuestions.length <= 1}
+                                >
+                                  Delete
+                                </Button>
+                              </div>
+
+                              <div className="space-y-2">
+                                <div className="text-xs font-medium uppercase tracking-wide text-zinc-500">
+                                  Question
+                                </div>
+                                <textarea
+                                  className="min-h-[96px] w-full rounded-md border border-zinc-200 px-3 py-2 text-sm text-zinc-900 shadow-sm outline-none ring-zinc-900/5 placeholder:text-zinc-400 focus-visible:ring-2"
+                                  value={q.question}
+                                  onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) =>
+                                    updateQuestion(q.id, { question: e.target.value })
+                                  }
+                                  disabled={quizSaving}
+                                />
+                              </div>
+
+                              <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                                <div className="space-y-2">
+                                  <div className="text-xs font-medium uppercase tracking-wide text-zinc-500">
+                                    Points
+                                  </div>
+                                  <Input
+                                    type="number"
+                                    min={1}
+                                    value={q.points}
+                                    onChange={(e) =>
+                                      updateQuestion(q.id, { points: Number(e.target.value) || 1 })
+                                    }
+                                    disabled={quizSaving}
+                                  />
+                                </div>
+
+                                <div className="space-y-2">
+                                  <div className="text-xs font-medium uppercase tracking-wide text-zinc-500">
+                                    Correct Answer
+                                  </div>
+                                  <select
+                                    key={`${q.id}:${uniqueOptions.join('|')}`}
+                                    className="w-full rounded-md border border-zinc-200 px-3 py-2 text-sm text-zinc-900 shadow-sm outline-none ring-zinc-900/5 focus-visible:ring-2"
+                                    value={q.answer}
+                                    onChange={(e) => updateQuestion(q.id, { answer: e.target.value })}
+                                    disabled={quizSaving || uniqueOptions.length === 0}
+                                  >
+                                    <option value="">
+                                      {uniqueOptions.length === 0 ? 'Add options first' : 'Select answer'}
+                                    </option>
+                                    {uniqueOptions.map((opt, optIndex) => (
+                                      <option key={`${opt}-${optIndex}`} value={opt}>
+                                        {opt}
+                                      </option>
+                                    ))}
+                                  </select>
+                                </div>
+                              </div>
+
+                              <div className="space-y-2">
+                                <div className="flex items-center justify-between">
+                                  <div className="text-xs font-medium uppercase tracking-wide text-zinc-500">
+                                    Options
+                                  </div>
+                                  <Button
+                                    variant="outline"
+                                    onClick={() => addOption(q.id)}
+                                    disabled={quizSaving}
+                                  >
+                                    <Plus className="mr-2 h-4 w-4" />
+                                    Add Option
+                                  </Button>
+                                </div>
+
+                                <div className="space-y-2">
+                                  {q.options.map((opt, optionIndex) => (
+                                    <div key={`${q.id}-${optionIndex}`} className="flex items-center gap-2">
+                                      <Input
+                                        value={opt}
+                                        onChange={(e) =>
+                                          updateQuestionOption(q.id, optionIndex, e.target.value)
+                                        }
+                                        disabled={quizSaving}
+                                        placeholder={`Option ${optionIndex + 1}`}
+                                      />
+                                      <Button
+                                        variant="outline"
+                                        onClick={() => removeOption(q.id, optionIndex)}
+                                        disabled={quizSaving || q.options.length <= 2}
+                                      >
+                                        Remove
+                                      </Button>
+                                    </div>
+                                  ))}
+                                </div>
+                              </div>
+                            </>
+                          );
+                        })()}
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                <div className="flex items-center justify-end gap-2">
+                  <Button
+                    variant="outline"
+                    onClick={() => {
+                      if (quizSaving) return;
+                      setQuizOpen(false);
+                      setQuizUnitId(null);
+                      setEditingQuizId(null);
+                      setQuizTitle('');
+                      setQuizTimeLimit(10);
+                      setQuizQuestions([]);
+                      setSelectedQuestionId(null);
+                      setQuizMessage(null);
+                      setQuizModalError(null);
+                    }}
+                    disabled={quizSaving}
+                  >
+                    Close
+                  </Button>
+                  <Button
+                    variant="outline"
+                    onClick={editingQuizId ? handleSaveQuiz : handleCreateQuiz}
+                    disabled={quizSaving || !quizTitle.trim()}
+                  >
+                    {quizSaving
+                      ? editingQuizId
+                        ? 'Saving...'
+                        : 'Creating...'
+                      : editingQuizId
+                        ? 'Save'
+                        : 'Create'}
                   </Button>
                 </div>
               </Card>
@@ -958,7 +1669,7 @@ export default function CourseDetailPage() {
             const materialsCount = summary?.materialCount ?? materialsByUnitId[unit.id]?.length ?? 0;
             const assignmentsCount =
               summary?.assignmentCount ?? assignmentsByUnitId[unit.id]?.length ?? 0;
-            const quizzesCount = summary?.quizCount ?? 0;
+            const quizzesCount = summary?.quizCount ?? quizzesByUnitId[unit.id]?.length ?? 0;
             const studentsLabel = '—';
 
             return (
@@ -1229,6 +1940,7 @@ export default function CourseDetailPage() {
                                   setAssignmentDescription('');
                                   setAssignmentDueDate('');
                                   setAssignmentUnitId(unit.id);
+                                  setEditingAssignmentId(null);
                                   setAssignmentOpen(true);
                                 }}
                               >
@@ -1253,38 +1965,64 @@ export default function CourseDetailPage() {
                           {!!assignmentsByUnitId[unit.id]?.length && (
                             <div className="divide-y divide-zinc-100 rounded-xl border border-zinc-200 bg-white">
                               {assignmentsByUnitId[unit.id].map((a) => (
-                                <button
+                                <div
                                   key={a.id}
-                                  type="button"
-                                  className="w-full px-4 py-3 text-left hover:bg-zinc-50"
-                                  onClick={() => {
-                                    if (!courseId) return;
-                                    const next = new URLSearchParams();
-                                    next.set('unitId', unit.id);
-                                    next.set('mode', mode);
-                                    router.push(
-                                      `/courses/${courseId}/assignments/${a.id}?${next.toString()}`,
-                                    );
-                                  }}
+                                  className="flex items-start justify-between gap-3 px-4 py-3 hover:bg-zinc-50"
                                 >
-                                  <div className="flex items-start justify-between gap-3">
-                                    <div className="min-w-0">
-                                      <div className="truncate text-sm font-medium text-zinc-900">
-                                        {a.title}
-                                      </div>
-                                      <div className="mt-1 text-xs text-zinc-500">
-                                        {a.due_date
-                                          ? `Due ${new Date(a.due_date).toLocaleString()}`
-                                          : 'No due date'}
-                                      </div>
+                                  <button
+                                    type="button"
+                                    className="min-w-0 flex-1 text-left"
+                                    onClick={() => {
+                                      if (!courseId) return;
+                                      const next = new URLSearchParams();
+                                      next.set('unitId', unit.id);
+                                      next.set('mode', mode);
+                                      router.push(
+                                        `/courses/${courseId}/assignments/${a.id}?${next.toString()}`,
+                                      );
+                                    }}
+                                  >
+                                    <div className="truncate text-sm font-medium text-zinc-900">
+                                      {a.title}
                                     </div>
-                                  </div>
-                                  {a.description && (
-                                    <div className="mt-2 text-sm text-zinc-600 whitespace-pre-wrap">
-                                      {a.description}
+                                    <div className="mt-1 text-xs text-zinc-500">
+                                      {a.due_date
+                                        ? `Due ${new Date(a.due_date).toLocaleString()}`
+                                        : 'No due date'}
+                                    </div>
+                                    {a.description && (
+                                      <div className="mt-2 text-sm text-zinc-600 whitespace-pre-wrap">
+                                        {a.description}
+                                      </div>
+                                    )}
+                                  </button>
+
+                                  {isEditMode && (
+                                    <div className="flex shrink-0 items-center gap-2">
+                                      <Button
+                                        variant="outline"
+                                        onClick={() => {
+                                          setAssignmentsErrorByUnitId((prev) => ({ ...prev, [unit.id]: null }));
+                                          setAssignmentMessage(null);
+                                          setAssignmentTitle(a.title ?? '');
+                                          setAssignmentDescription(a.description ?? '');
+                                          setAssignmentDueDate(formatDatetimeLocal(a.due_date));
+                                          setAssignmentUnitId(unit.id);
+                                          setEditingAssignmentId(a.id);
+                                          setAssignmentOpen(true);
+                                        }}
+                                      >
+                                        Edit
+                                      </Button>
+                                      <Button
+                                        variant="outline"
+                                        onClick={() => handleDeleteAssignment({ unitId: unit.id, assignmentId: a.id })}
+                                      >
+                                        Delete
+                                      </Button>
                                     </div>
                                   )}
-                                </button>
+                                </div>
                               ))}
                             </div>
                           )}
@@ -1309,16 +2047,114 @@ export default function CourseDetailPage() {
                               <Button
                                 variant="outline"
                                 className="border-zinc-900 bg-zinc-900 text-white hover:bg-zinc-800 hover:text-white"
-                                onClick={() => setError('Add quiz is not implemented yet')}
+                                onClick={() => {
+                                  setQuizzesErrorByUnitId((prev) => ({ ...prev, [unit.id]: null }));
+                                  setQuizTitle('');
+                                  setQuizTimeLimit(10);
+                                  const first = makeBlankQuestion();
+                                  setQuizQuestions([first]);
+                                  setSelectedQuestionId(first.id);
+                                  setQuizMessage(null);
+                                  setQuizModalError(null);
+                                  setQuizUnitId(unit.id);
+                                  setEditingQuizId(null);
+                                  setQuizOpen(true);
+                                }}
                               >
                                 <Plus className="mr-2 h-4 w-4" />
                                 Add Quiz
                               </Button>
                             )}
                           </div>
-                          <div className="rounded-xl border border-zinc-200 bg-white px-4 py-8 text-center text-sm text-zinc-600">
-                            No quizzes yet.
-                          </div>
+
+                          {quizzesErrorByUnitId[unit.id] && (
+                            <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+                              {quizzesErrorByUnitId[unit.id]}
+                            </div>
+                          )}
+
+                          {quizzesLoadingByUnitId[unit.id] && !quizzesByUnitId[unit.id] && (
+                            <div className="rounded-xl border border-zinc-200 bg-white px-4 py-8 text-center text-sm text-zinc-600">
+                              Loading quizzes...
+                            </div>
+                          )}
+
+                          {!!quizzesByUnitId[unit.id]?.length && (
+                            <div className="divide-y divide-zinc-100 rounded-xl border border-zinc-200 bg-white">
+                              {quizzesByUnitId[unit.id].map((q) => (
+                                <div
+                                  key={q.id}
+                                  className="flex items-start justify-between gap-3 px-4 py-3 hover:bg-zinc-50"
+                                >
+                                  <button
+                                    type="button"
+                                    className="min-w-0 flex-1 text-left"
+                                    onClick={() => {
+                                      if (!courseId) return;
+                                      const next = new URLSearchParams();
+                                      next.set('unitId', unit.id);
+                                      next.set('mode', mode);
+                                      router.push(
+                                        `/courses/${courseId}/quizzes/${q.id}?${next.toString()}`,
+                                      );
+                                    }}
+                                  >
+                                    <div className="truncate text-sm font-medium text-zinc-900">
+                                      {q.title}
+                                    </div>
+                                    <div className="mt-1 text-xs text-zinc-500">
+                                      {(q.quiz_data?.questions?.length ?? 0)} questions •{' '}
+                                      {q.quiz_data?.time_limit ?? '—'} min • Created{' '}
+                                      {q.created_at ? new Date(q.created_at).toLocaleString() : '—'}
+                                    </div>
+                                  </button>
+
+                                  {isEditMode && (
+                                    <div className="flex shrink-0 items-center gap-2">
+                                      <Button
+                                        variant="outline"
+                                        onClick={() => {
+                                          setQuizzesErrorByUnitId((prev) => ({ ...prev, [unit.id]: null }));
+                                          setQuizTitle(q.title ?? '');
+                                          setQuizTimeLimit(q.quiz_data?.time_limit ?? 10);
+                                          const questions = (q.quiz_data?.questions ?? []).map((x) => ({
+                                            ...x,
+                                            id: x.id?.trim() ? x.id : makeClientId(),
+                                            options: Array.isArray(x.options) ? x.options : [],
+                                            points: x.points ?? 1,
+                                          }));
+                                          const initialQuestions = questions.length > 0 ? questions : [makeBlankQuestion()];
+                                          setQuizQuestions(initialQuestions);
+                                          setSelectedQuestionId(initialQuestions[0]?.id ?? null);
+                                          setQuizMessage(null);
+                                          setQuizModalError(null);
+                                          setQuizUnitId(unit.id);
+                                          setEditingQuizId(q.id);
+                                          setQuizOpen(true);
+                                        }}
+                                      >
+                                        Edit
+                                      </Button>
+                                      <Button
+                                        variant="outline"
+                                        onClick={() => handleDeleteQuiz({ unitId: unit.id, quizId: q.id })}
+                                      >
+                                        Delete
+                                      </Button>
+                                    </div>
+                                  )}
+                                </div>
+                              ))}
+                            </div>
+                          )}
+
+                          {!quizzesLoadingByUnitId[unit.id] &&
+                            (!quizzesByUnitId[unit.id] || quizzesByUnitId[unit.id].length === 0) &&
+                            !quizzesErrorByUnitId[unit.id] && (
+                              <div className="rounded-xl border border-zinc-200 bg-white px-4 py-8 text-center text-sm text-zinc-600">
+                                No quizzes yet.
+                              </div>
+                            )}
                         </div>
                       )}
                     </div>

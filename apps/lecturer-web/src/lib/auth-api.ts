@@ -578,6 +578,94 @@ export interface LearningUnitAssignment {
   updated_at: string;
 }
 
+export interface QuizQuestion {
+  id: string;
+  question: string;
+  options: string[];
+  answer: string;
+  points: number;
+}
+
+export interface QuizData {
+  questions: QuizQuestion[];
+  time_limit: number;
+}
+
+export interface LearningUnitQuiz {
+  id: string;
+  learning_unit_id: string;
+  title: string;
+  quiz_data: QuizData;
+  created_at: string;
+  updated_at: string;
+}
+
+export async function getLearningUnitQuizzes(
+  unitId: string,
+  limit = 50,
+  offset = 0,
+): Promise<LearningUnitQuiz[]> {
+  const params = new URLSearchParams();
+  if (limit != null) params.set('limit', String(limit));
+  if (offset != null) params.set('offset', String(offset));
+
+  const response = await fetch(
+    `${API_BASE_URL}/learning-units/${unitId}/quizzes${params.toString() ? `?${params.toString()}` : ''}`,
+    {
+      method: 'GET',
+      headers: {
+        Accept: 'application/json',
+        ...getAuthHeaders(),
+      },
+    },
+  );
+
+  const data = await response.json().catch(() => ({}));
+
+  if (!response.ok) {
+    const msg = data?.error || data?.message || 'Failed to fetch quizzes';
+    throw new Error(msg);
+  }
+
+  if (Array.isArray(data?.quizzes)) {
+    return data.quizzes as LearningUnitQuiz[];
+  }
+
+  if (Array.isArray(data?.Quizzes)) {
+    return data.Quizzes as LearningUnitQuiz[];
+  }
+
+  return [];
+}
+
+export async function createLearningUnitQuiz(
+  unitId: string,
+  params: { title: string; quiz_data: QuizData },
+): Promise<LearningUnitQuiz> {
+  const response = await fetch(`${API_BASE_URL}/learning-units/${unitId}/quizzes`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Accept: 'application/json',
+      ...getAuthHeaders(),
+    },
+    body: JSON.stringify(params),
+  });
+
+  const data = await response.json().catch(() => ({}));
+
+  if (!response.ok) {
+    const msg = data?.error || data?.message || 'Failed to create quiz';
+    throw new Error(msg);
+  }
+
+  if (data?.quiz) {
+    return data.quiz as LearningUnitQuiz;
+  }
+
+  return data as LearningUnitQuiz;
+}
+
 export async function getLearningUnitAssignments(
   unitId: string,
   limit = 50,
@@ -648,6 +736,107 @@ export async function createLearningUnitAssignment(
   }
 
   return data as LearningUnitAssignment;
+}
+
+export async function updateLearningUnitAssignment(
+  unitId: string,
+  assignmentId: string,
+  updates: { title?: string; description?: string; due_date?: string },
+): Promise<LearningUnitAssignment> {
+  const response = await fetch(
+    `${API_BASE_URL}/learning-units/${unitId}/assignments/${assignmentId}`,
+    {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json',
+        Accept: 'application/json',
+        ...getAuthHeaders(),
+      },
+      body: JSON.stringify(updates),
+    },
+  );
+
+  const data = await response.json().catch(() => ({}));
+
+  if (!response.ok) {
+    const msg = data?.error || data?.message || 'Failed to update assignment';
+    throw new Error(msg);
+  }
+
+  if (data?.assignment) {
+    return data.assignment as LearningUnitAssignment;
+  }
+
+  return data as LearningUnitAssignment;
+}
+
+export async function deleteLearningUnitAssignment(
+  unitId: string,
+  assignmentId: string,
+): Promise<void> {
+  const response = await fetch(
+    `${API_BASE_URL}/learning-units/${unitId}/assignments/${assignmentId}`,
+    {
+      method: 'DELETE',
+      headers: {
+        Accept: 'application/json',
+        ...getAuthHeaders(),
+      },
+    },
+  );
+
+  const data = await response.json().catch(() => ({}));
+
+  if (!response.ok) {
+    const msg = data?.error || data?.message || 'Failed to delete assignment';
+    throw new Error(msg);
+  }
+}
+
+export async function updateLearningUnitQuiz(
+  unitId: string,
+  quizId: string,
+  updates: { title?: string; quiz_data?: QuizData },
+): Promise<LearningUnitQuiz> {
+  const response = await fetch(`${API_BASE_URL}/learning-units/${unitId}/quizzes/${quizId}`, {
+    method: 'PUT',
+    headers: {
+      'Content-Type': 'application/json',
+      Accept: 'application/json',
+      ...getAuthHeaders(),
+    },
+    body: JSON.stringify(updates),
+  });
+
+  const data = await response.json().catch(() => ({}));
+
+  if (!response.ok) {
+    const msg = data?.error || data?.message || 'Failed to update quiz';
+    throw new Error(msg);
+  }
+
+  if (data?.quiz) {
+    return data.quiz as LearningUnitQuiz;
+  }
+
+  return data as LearningUnitQuiz;
+}
+
+export async function deleteLearningUnitQuiz(unitId: string, quizId: string): Promise<void> {
+  const response = await fetch(`${API_BASE_URL}/learning-units/${unitId}/quizzes/${quizId}`, {
+    method: 'DELETE',
+    headers: {
+      Accept: 'application/json',
+      ...getAuthHeaders(),
+    },
+  });
+
+  const data = await response.json().catch(() => ({}));
+
+  if (!response.ok) {
+    const msg = data?.error || data?.message || 'Failed to delete quiz';
+    throw new Error(msg);
+  }
 }
 
 export interface AssignmentSubmissionStudent {
@@ -733,4 +922,64 @@ export async function downloadSubmissionPDF(params: {
   }
 
   return await response.blob();
+}
+
+export interface QuizAttemptStudent {
+  id: string;
+  name: string;
+  email: string;
+  unique_identifier: string;
+}
+
+export interface QuizAttempt {
+  id: string;
+  quiz_id: string;
+  student_id: string;
+  attempt_no: number;
+  answers?: unknown | null;
+  score: number;
+  max_score: number;
+  created_at: string;
+}
+
+export interface QuizAttemptRow {
+  student: QuizAttemptStudent;
+  attempt: QuizAttempt | null;
+}
+
+export async function getQuizAttempts(
+  unitId: string,
+  quizId: string,
+): Promise<{
+  unit_id: string;
+  quiz_id: string;
+  total_students: number;
+  attempted_count: number;
+  rows: QuizAttemptRow[];
+}> {
+  const response = await fetch(
+    `${API_BASE_URL}/learning-units/${unitId}/quizzes/${quizId}/attempts`,
+    {
+      method: 'GET',
+      headers: {
+        Accept: 'application/json',
+        ...getAuthHeaders(),
+      },
+    },
+  );
+
+  const data = await response.json().catch(() => ({}));
+
+  if (!response.ok) {
+    const msg = data?.error || data?.message || 'Failed to fetch quiz attempts';
+    throw new Error(msg);
+  }
+
+  return data as {
+    unit_id: string;
+    quiz_id: string;
+    total_students: number;
+    attempted_count: number;
+    rows: QuizAttemptRow[];
+  };
 }

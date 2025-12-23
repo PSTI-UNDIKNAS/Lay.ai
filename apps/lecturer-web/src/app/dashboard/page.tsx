@@ -10,7 +10,6 @@ import { getMe, fetchLecturerDashboardStats, LecturerDashboardStats } from '@/li
 
 export default function LecturerDashboard() {
   const [name, setName] = useState<string>('');
-  const [identifier, setIdentifier] = useState<string>('');
   const [stats, setStats] = useState<LecturerDashboardStats>({
     totalCourses: 5,
     totalStudents: 247,
@@ -23,7 +22,6 @@ export default function LecturerDashboard() {
       .then((res) => {
         if (!mounted) return;
         setName(res.user.name);
-        setIdentifier(res.user.unique_identifier);
       })
       .catch(() => {});
     return () => {
