@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
@@ -8,6 +9,7 @@ import (
 	"path"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
@@ -284,6 +286,169 @@ func (h *LearningUnitHandler) CreateAssignment(c *gin.Context) {
 	c.JSON(http.StatusCreated, gin.H{"assignment": assignment})
 }
 
+func (h *LearningUnitHandler) UpdateAssignment(c *gin.Context) {
+	userIDValue, exists := c.Get("user_id")
+	if !exists {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "User not authenticated"})
+		return
+	}
+
+	unitIDStr := c.Param("unitId")
+	unitID, err := uuid.Parse(unitIDStr)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid unit ID"})
+		return
+	}
+
+	assignmentIDStr := c.Param("assignmentId")
+	assignmentID, err := uuid.Parse(assignmentIDStr)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid assignment ID"})
+		return
+	}
+
+	unit, err := h.learningUnitService.GetLearningUnitByID(unitID.String())
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "Learning unit not found"})
+		return
+	}
+
+	course, err := h.courseService.GetCourseByID(unit.CourseID.String())
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "Course not found"})
+		return
+	}
+
+	userIDStr, ok := userIDValue.(string)
+	if !ok {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "User not authenticated"})
+		return
+	}
+	lecturerID, err := uuid.Parse(userIDStr)
+	if err != nil {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "User not authenticated"})
+		return
+	}
+	if course.CreatorID != lecturerID {
+		c.JSON(http.StatusForbidden, gin.H{"error": "Access denied"})
+		return
+	}
+
+	assignment, err := h.assignmentService.GetAssignmentByID(assignmentID.String())
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "Assignment not found"})
+		return
+	}
+	if assignment.LearningUnitID != unitID {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Assignment does not belong to this learning unit"})
+		return
+	}
+
+	var req struct {
+		Title       string  `json:"title"`
+		Description *string `json:"description"`
+		DueDate     *string `json:"due_date"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid request body"})
+		return
+	}
+
+	updates := make(map[string]interface{})
+	if strings.TrimSpace(req.Title) != "" {
+		updates["title"] = strings.TrimSpace(req.Title)
+	}
+	if req.Description != nil {
+		updates["description"] = *req.Description
+	}
+	if req.DueDate != nil {
+		if strings.TrimSpace(*req.DueDate) == "" {
+			updates["due_date"] = nil
+		} else {
+			parsed, err := time.Parse(time.RFC3339, *req.DueDate)
+			if err != nil {
+				c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid due date"})
+				return
+			}
+			updates["due_date"] = &parsed
+		}
+	}
+
+	updated, err := h.assignmentService.UpdateAssignment(assignmentID.String(), updates)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to update assignment"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"assignment": updated})
+}
+
+func (h *LearningUnitHandler) DeleteAssignment(c *gin.Context) {
+	userIDValue, exists := c.Get("user_id")
+	if !exists {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "User not authenticated"})
+		return
+	}
+
+	unitIDStr := c.Param("unitId")
+	unitID, err := uuid.Parse(unitIDStr)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid unit ID"})
+		return
+	}
+
+	assignmentIDStr := c.Param("assignmentId")
+	assignmentID, err := uuid.Parse(assignmentIDStr)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid assignment ID"})
+		return
+	}
+
+	unit, err := h.learningUnitService.GetLearningUnitByID(unitID.String())
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "Learning unit not found"})
+		return
+	}
+
+	course, err := h.courseService.GetCourseByID(unit.CourseID.String())
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "Course not found"})
+		return
+	}
+
+	userIDStr, ok := userIDValue.(string)
+	if !ok {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "User not authenticated"})
+		return
+	}
+	lecturerID, err := uuid.Parse(userIDStr)
+	if err != nil {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "User not authenticated"})
+		return
+	}
+	if course.CreatorID != lecturerID {
+		c.JSON(http.StatusForbidden, gin.H{"error": "Access denied"})
+		return
+	}
+
+	assignment, err := h.assignmentService.GetAssignmentByID(assignmentID.String())
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "Assignment not found"})
+		return
+	}
+	if assignment.LearningUnitID != unitID {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Assignment does not belong to this learning unit"})
+		return
+	}
+
+	if err := h.assignmentService.DeleteAssignment(assignmentID.String()); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to delete assignment"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"success": true})
+}
+
 // GetAssignments handles GET /api/learning-units/{unitId}/assignments - Lecturer only
 func (h *LearningUnitHandler) GetAssignments(c *gin.Context) {
 	_, exists := c.Get("user_id")
@@ -333,6 +498,343 @@ func (h *LearningUnitHandler) GetAssignments(c *gin.Context) {
 	c.JSON(http.StatusOK, resp)
 }
 
+func (h *LearningUnitHandler) CreateQuiz(c *gin.Context) {
+	userIDValue, exists := c.Get("user_id")
+	if !exists {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "User not authenticated"})
+		return
+	}
+
+	unitIDStr := c.Param("unitId")
+	unitID, err := uuid.Parse(unitIDStr)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid unit ID"})
+		return
+	}
+
+	unit, err := h.learningUnitService.GetLearningUnitByID(unitID.String())
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "Learning unit not found"})
+		return
+	}
+
+	course, err := h.courseService.GetCourseByID(unit.CourseID.String())
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "Course not found"})
+		return
+	}
+
+	userIDStr, ok := userIDValue.(string)
+	if !ok {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "User not authenticated"})
+		return
+	}
+
+	lecturerID, err := uuid.Parse(userIDStr)
+	if err != nil {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "User not authenticated"})
+		return
+	}
+	if course.CreatorID != lecturerID {
+		c.JSON(http.StatusForbidden, gin.H{"error": "Access denied"})
+		return
+	}
+
+	var req models.CreateQuizRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid request body"})
+		return
+	}
+
+	quizDataJSON, err := json.Marshal(req.QuizData)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid quiz data"})
+		return
+	}
+
+	quiz := &models.Quiz{
+		LearningUnitID: unitID,
+		Title:          req.Title,
+		QuizData:       quizDataJSON,
+	}
+
+	created, err := h.quizStore.CreateQuiz(quiz)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to create quiz"})
+		return
+	}
+
+	var quizData models.QuizData
+	if err := json.Unmarshal(created.QuizData, &quizData); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Invalid quiz data"})
+		return
+	}
+
+	c.JSON(http.StatusCreated, gin.H{
+		"quiz": models.QuizResponse{
+			ID:             created.ID,
+			LearningUnitID: created.LearningUnitID,
+			Title:          created.Title,
+			QuizData:       quizData,
+			CreatedAt:      created.CreatedAt,
+			UpdatedAt:      created.UpdatedAt,
+		},
+	})
+}
+
+func (h *LearningUnitHandler) GetQuizzes(c *gin.Context) {
+	userIDValue, exists := c.Get("user_id")
+	if !exists {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "User not authenticated"})
+		return
+	}
+
+	unitIDStr := c.Param("unitId")
+	unitID, err := uuid.Parse(unitIDStr)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid unit ID"})
+		return
+	}
+
+	unit, err := h.learningUnitService.GetLearningUnitByID(unitID.String())
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "Learning unit not found"})
+		return
+	}
+
+	course, err := h.courseService.GetCourseByID(unit.CourseID.String())
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "Course not found"})
+		return
+	}
+
+	userIDStr, ok := userIDValue.(string)
+	if !ok {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "User not authenticated"})
+		return
+	}
+
+	lecturerID, err := uuid.Parse(userIDStr)
+	if err != nil {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "User not authenticated"})
+		return
+	}
+	if course.CreatorID != lecturerID {
+		c.JSON(http.StatusForbidden, gin.H{"error": "Access denied"})
+		return
+	}
+
+	limit, _ := strconv.Atoi(c.DefaultQuery("limit", "50"))
+	offset, _ := strconv.Atoi(c.DefaultQuery("offset", "0"))
+
+	quizzes, err := h.quizStore.GetQuizzesByLearningUnitID(unitID.String(), limit, offset)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to fetch quizzes"})
+		return
+	}
+
+	resp := models.GetQuizzesResponse{
+		Quizzes: make([]models.QuizResponse, 0, len(quizzes)),
+		Total:   len(quizzes),
+	}
+
+	for _, q := range quizzes {
+		var quizData models.QuizData
+		if err := json.Unmarshal(q.QuizData, &quizData); err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Invalid quiz data"})
+			return
+		}
+		resp.Quizzes = append(resp.Quizzes, models.QuizResponse{
+			ID:             q.ID,
+			LearningUnitID: q.LearningUnitID,
+			Title:          q.Title,
+			QuizData:       quizData,
+			CreatedAt:      q.CreatedAt,
+			UpdatedAt:      q.UpdatedAt,
+		})
+	}
+
+	c.JSON(http.StatusOK, resp)
+}
+
+func (h *LearningUnitHandler) UpdateQuiz(c *gin.Context) {
+	userIDValue, exists := c.Get("user_id")
+	if !exists {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "User not authenticated"})
+		return
+	}
+
+	unitIDStr := c.Param("unitId")
+	unitID, err := uuid.Parse(unitIDStr)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid unit ID"})
+		return
+	}
+
+	quizIDStr := c.Param("quizId")
+	quizID, err := uuid.Parse(quizIDStr)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid quiz ID"})
+		return
+	}
+
+	unit, err := h.learningUnitService.GetLearningUnitByID(unitID.String())
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "Learning unit not found"})
+		return
+	}
+
+	course, err := h.courseService.GetCourseByID(unit.CourseID.String())
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "Course not found"})
+		return
+	}
+
+	userIDStr, ok := userIDValue.(string)
+	if !ok {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "User not authenticated"})
+		return
+	}
+	lecturerID, err := uuid.Parse(userIDStr)
+	if err != nil {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "User not authenticated"})
+		return
+	}
+	if course.CreatorID != lecturerID {
+		c.JSON(http.StatusForbidden, gin.H{"error": "Access denied"})
+		return
+	}
+
+	quiz, err := h.quizStore.GetQuizByID(quizID.String())
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "Quiz not found"})
+		return
+	}
+	if quiz.LearningUnitID != unitID {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Quiz does not belong to this learning unit"})
+		return
+	}
+
+	var req struct {
+		Title    *string          `json:"title"`
+		QuizData *models.QuizData `json:"quiz_data"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid request body"})
+		return
+	}
+
+	updates := make(map[string]interface{})
+	if req.Title != nil && strings.TrimSpace(*req.Title) != "" {
+		updates["title"] = strings.TrimSpace(*req.Title)
+	}
+	if req.QuizData != nil {
+		quizDataJSON, err := json.Marshal(req.QuizData)
+		if err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid quiz data"})
+			return
+		}
+		updates["quiz_data"] = quizDataJSON
+	}
+
+	updated, err := h.quizStore.UpdateQuiz(quizID.String(), updates)
+	if err != nil {
+		if err.Error() == "quiz not found" {
+			c.JSON(http.StatusNotFound, gin.H{"error": "Quiz not found"})
+			return
+		}
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to update quiz"})
+		return
+	}
+
+	var quizData models.QuizData
+	if err := json.Unmarshal(updated.QuizData, &quizData); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Invalid quiz data"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"quiz": models.QuizResponse{
+			ID:             updated.ID,
+			LearningUnitID: updated.LearningUnitID,
+			Title:          updated.Title,
+			QuizData:       quizData,
+			CreatedAt:      updated.CreatedAt,
+			UpdatedAt:      updated.UpdatedAt,
+		},
+	})
+}
+
+func (h *LearningUnitHandler) DeleteQuiz(c *gin.Context) {
+	userIDValue, exists := c.Get("user_id")
+	if !exists {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "User not authenticated"})
+		return
+	}
+
+	unitIDStr := c.Param("unitId")
+	unitID, err := uuid.Parse(unitIDStr)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid unit ID"})
+		return
+	}
+
+	quizIDStr := c.Param("quizId")
+	quizID, err := uuid.Parse(quizIDStr)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid quiz ID"})
+		return
+	}
+
+	unit, err := h.learningUnitService.GetLearningUnitByID(unitID.String())
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "Learning unit not found"})
+		return
+	}
+
+	course, err := h.courseService.GetCourseByID(unit.CourseID.String())
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "Course not found"})
+		return
+	}
+
+	userIDStr, ok := userIDValue.(string)
+	if !ok {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "User not authenticated"})
+		return
+	}
+	lecturerID, err := uuid.Parse(userIDStr)
+	if err != nil {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "User not authenticated"})
+		return
+	}
+	if course.CreatorID != lecturerID {
+		c.JSON(http.StatusForbidden, gin.H{"error": "Access denied"})
+		return
+	}
+
+	quiz, err := h.quizStore.GetQuizByID(quizID.String())
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "Quiz not found"})
+		return
+	}
+	if quiz.LearningUnitID != unitID {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Quiz does not belong to this learning unit"})
+		return
+	}
+
+	if err := h.quizStore.DeleteQuiz(quizID.String()); err != nil {
+		if err.Error() == "quiz not found" {
+			c.JSON(http.StatusNotFound, gin.H{"error": "Quiz not found"})
+			return
+		}
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to delete quiz"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"success": true})
+}
+
 func (h *LearningUnitHandler) GetAssignmentSubmissions(c *gin.Context) {
 	userIDValue, exists := c.Get("user_id")
 	if !exists {
@@ -366,7 +868,13 @@ func (h *LearningUnitHandler) GetAssignmentSubmissions(c *gin.Context) {
 		return
 	}
 
-	lecturerID, err := uuid.Parse(userIDValue.(string))
+	userIDStr, ok := userIDValue.(string)
+	if !ok {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "User not authenticated"})
+		return
+	}
+
+	lecturerID, err := uuid.Parse(userIDStr)
 	if err != nil {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "User not authenticated"})
 		return
@@ -431,6 +939,107 @@ func (h *LearningUnitHandler) GetAssignmentSubmissions(c *gin.Context) {
 		"assignment_id":   assignmentID.String(),
 		"total_students":  len(students),
 		"submitted_count": submittedCount,
+		"rows":            rows,
+	})
+}
+
+func (h *LearningUnitHandler) GetQuizAttempts(c *gin.Context) {
+	userIDValue, exists := c.Get("user_id")
+	if !exists {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "User not authenticated"})
+		return
+	}
+
+	unitIDStr := c.Param("unitId")
+	unitID, err := uuid.Parse(unitIDStr)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid unit ID"})
+		return
+	}
+
+	quizIDStr := c.Param("quizId")
+	quizID, err := uuid.Parse(quizIDStr)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid quiz ID"})
+		return
+	}
+
+	unit, err := h.learningUnitService.GetLearningUnitByID(unitID.String())
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "Learning unit not found"})
+		return
+	}
+
+	course, err := h.courseService.GetCourseByID(unit.CourseID.String())
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "Course not found"})
+		return
+	}
+
+	lecturerID, err := uuid.Parse(userIDValue.(string))
+	if err != nil {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "User not authenticated"})
+		return
+	}
+	if course.CreatorID != lecturerID {
+		c.JSON(http.StatusForbidden, gin.H{"error": "Access denied"})
+		return
+	}
+
+	quiz, err := h.quizStore.GetQuizByID(quizID.String())
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "Quiz not found"})
+		return
+	}
+	if quiz.LearningUnitID != unitID {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Quiz does not belong to this learning unit"})
+		return
+	}
+
+	students, err := h.enrollmentStore.GetEnrolledStudentsByCourseID(unit.CourseID.String())
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to fetch enrolled students"})
+		return
+	}
+
+	attempts, err := h.quizStore.GetQuizAttemptsByQuizID(c.Request.Context(), quizID, 1000, 0)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to fetch quiz attempts"})
+		return
+	}
+
+	latestByStudent := make(map[string]*models.QuizAttempt, len(attempts))
+	for _, a := range attempts {
+		sid := a.StudentID.String()
+		if _, ok := latestByStudent[sid]; ok {
+			continue
+		}
+		latestByStudent[sid] = a
+	}
+
+	type row struct {
+		Student *models.User        `json:"student"`
+		Attempt *models.QuizAttempt `json:"attempt"`
+	}
+
+	rows := make([]row, 0, len(students))
+	attemptedCount := 0
+	for _, student := range students {
+		attempt := latestByStudent[student.ID.String()]
+		if attempt != nil {
+			attemptedCount++
+		}
+		rows = append(rows, row{
+			Student: student,
+			Attempt: attempt,
+		})
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"unit_id":         unitID.String(),
+		"quiz_id":         quizID.String(),
+		"total_students":  len(students),
+		"attempted_count": attemptedCount,
 		"rows":            rows,
 	})
 }

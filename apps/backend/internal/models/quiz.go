@@ -9,12 +9,12 @@ import (
 
 // Quiz represents a quiz in the system
 type Quiz struct {
-	ID               uuid.UUID       `json:"id" db:"id"`
-	LearningUnitID   uuid.UUID       `json:"learning_unit_id" db:"learning_unit_id"`
-	Title            string          `json:"title" db:"title"`
-	QuizData         json.RawMessage `json:"quiz_data" db:"quiz_data"`
-	CreatedAt        time.Time       `json:"created_at" db:"created_at"`
-	UpdatedAt        time.Time       `json:"updated_at" db:"updated_at"`
+	ID             uuid.UUID       `json:"id" db:"id"`
+	LearningUnitID uuid.UUID       `json:"learning_unit_id" db:"learning_unit_id"`
+	Title          string          `json:"title" db:"title"`
+	QuizData       json.RawMessage `json:"quiz_data" db:"quiz_data"`
+	CreatedAt      time.Time       `json:"created_at" db:"created_at"`
+	UpdatedAt      time.Time       `json:"updated_at" db:"updated_at"`
 }
 
 // QuizQuestion represents a single quiz question
@@ -34,24 +34,24 @@ type QuizData struct {
 
 // CreateQuizRequest represents the request payload for creating a quiz
 type CreateQuizRequest struct {
-	Title     string    `json:"title" binding:"required"`
-	QuizData  QuizData  `json:"quiz_data" binding:"required"`
+	Title    string   `json:"title" binding:"required"`
+	QuizData QuizData `json:"quiz_data" binding:"required"`
 }
 
 // UpdateQuizRequest represents the request payload for updating a quiz
 type UpdateQuizRequest struct {
-	Title     string    `json:"title"`
-	QuizData  QuizData  `json:"quiz_data"`
+	Title    string   `json:"title"`
+	QuizData QuizData `json:"quiz_data"`
 }
 
 // QuizResponse represents the response for quiz operations
 type QuizResponse struct {
-	ID               uuid.UUID `json:"id"`
-	LearningUnitID   uuid.UUID `json:"learning_unit_id"`
-	Title            string    `json:"title"`
-	QuizData         QuizData  `json:"quiz_data"`
-	CreatedAt        time.Time `json:"created_at"`
-	UpdatedAt        time.Time `json:"updated_at"`
+	ID             uuid.UUID `json:"id"`
+	LearningUnitID uuid.UUID `json:"learning_unit_id"`
+	Title          string    `json:"title"`
+	QuizData       QuizData  `json:"quiz_data"`
+	CreatedAt      time.Time `json:"created_at"`
+	UpdatedAt      time.Time `json:"updated_at"`
 }
 
 // GetQuizzesResponse represents the response for getting multiple quizzes
@@ -68,6 +68,22 @@ type FlashcardSet struct {
 	FlashcardsData json.RawMessage `json:"flashcards_data" db:"flashcards_data"`
 	CreatedAt      time.Time       `json:"created_at" db:"created_at"`
 	UpdatedAt      time.Time       `json:"updated_at" db:"updated_at"`
+}
+
+type QuizSubmissionAnswer struct {
+	QuestionID string `json:"question_id"`
+	Answer     string `json:"answer"`
+}
+
+type QuizAttempt struct {
+	ID        uuid.UUID       `json:"id" db:"id"`
+	QuizID    uuid.UUID       `json:"quiz_id" db:"quiz_id"`
+	StudentID uuid.UUID       `json:"student_id" db:"student_id"`
+	AttemptNo int             `json:"attempt_no" db:"attempt_no"`
+	Answers   json.RawMessage `json:"answers" db:"answers"`
+	Score     int             `json:"score" db:"score"`
+	MaxScore  int             `json:"max_score" db:"max_score"`
+	CreatedAt time.Time       `json:"created_at" db:"created_at"`
 }
 
 // Flashcard represents a flashcard in the system
@@ -93,11 +109,11 @@ type CreateFlashcardRequest struct {
 
 // FlashcardSetResponse represents the response for flashcard set operations
 type FlashcardSetResponse struct {
-	ID               uuid.UUID `json:"id"`
-	LearningUnitID   uuid.UUID `json:"learning_unit_id"`
-	Title            string    `json:"title"`
-	CreatedAt        time.Time `json:"created_at"`
-	UpdatedAt        time.Time `json:"updated_at"`
+	ID             uuid.UUID `json:"id"`
+	LearningUnitID uuid.UUID `json:"learning_unit_id"`
+	Title          string    `json:"title"`
+	CreatedAt      time.Time `json:"created_at"`
+	UpdatedAt      time.Time `json:"updated_at"`
 }
 
 // FlashcardResponse represents the response for flashcard operations

@@ -5,7 +5,9 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
+	"lay.ai/backend/internal/models"
 	"lay.ai/backend/internal/services"
+	"lay.ai/backend/internal/store"
 )
 
 type ProgressHandler struct {
@@ -15,6 +17,7 @@ type ProgressHandler struct {
 	assignmentService   *services.AssignmentService
 	quizService         *services.QuizService
 	submissionService   *services.SubmissionService
+	enrollmentStore     *store.EnrollmentStore
 }
 
 func NewProgressHandler(
@@ -23,6 +26,7 @@ func NewProgressHandler(
 	assignmentService *services.AssignmentService,
 	quizService *services.QuizService,
 	submissionService *services.SubmissionService,
+	enrollmentStore *store.EnrollmentStore,
 ) *ProgressHandler {
 	return &ProgressHandler{
 		courseService:       courseService,
@@ -30,6 +34,7 @@ func NewProgressHandler(
 		assignmentService:   assignmentService,
 		quizService:         quizService,
 		submissionService:   submissionService,
+		enrollmentStore:     enrollmentStore,
 	}
 }
 
@@ -58,8 +63,8 @@ func (h *ProgressHandler) GetStudentProgress(c *gin.Context) {
 		"course_id":  courseID,
 		"student_id": userID,
 		"progress": gin.H{
-			"completed_units":      0,
-			"total_units":          0,
+			"completed_units":       0,
+			"total_units":           0,
 			"completed_assignments": 0,
 			"total_assignments":     0,
 			"completed_quizzes":     0,
@@ -91,9 +96,9 @@ func (h *ProgressHandler) CompleteUnit(c *gin.Context) {
 
 	// For now, return a success response
 	c.JSON(http.StatusOK, gin.H{
-		"message":    "Unit marked as completed",
-		"unit_id":    unitID,
-		"student_id": userID,
+		"message":      "Unit marked as completed",
+		"unit_id":      unitID,
+		"student_id":   userID,
 		"completed_at": "2024-01-01T00:00:00Z", // Placeholder timestamp
 	})
 }
@@ -140,8 +145,20 @@ func (h *ProgressHandler) SubmitAssignment(c *gin.Context) {
 // SubmitQuiz handles POST /api/progress/quizzes/{quizId}/submit - Enrolled students only
 func (h *ProgressHandler) SubmitQuiz(c *gin.Context) {
 	// Get user from context
-	userID, exists := c.Get("user_id")
+	userIDVal, exists := c.Get("user_id")
 	if !exists {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "User not authenticated"})
+		return
+	}
+
+	userIDStr, ok := userIDVal.(string)
+	if !ok {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "User not authenticated"})
+		return
+	}
+
+	userID, err := uuid.Parse(userIDStr)
+	if err != nil {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "User not authenticated"})
 		return
 	}
@@ -156,25 +173,48 @@ func (h *ProgressHandler) SubmitQuiz(c *gin.Context) {
 
 	// Parse request body
 	var req struct {
-		Answers []struct {
-			QuestionID string `json:"question_id" binding:"required"`
-			Answer     string `json:"answer" binding:"required"`
-		} `json:"answers" binding:"required"`
+		Answers []models.QuizSubmissionAnswer `json:"answers" binding:"required"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid request body"})
 		return
 	}
 
-	// TODO: Verify user is enrolled in the course that contains this quiz
-	// TODO: Process quiz submission and calculate score
+	quiz, err := h.quizService.GetQuizByID(quizID.String())
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "Quiz not found"})
+		return
+	}
 
-	// For now, return a success response
+	unit, err := h.learningUnitService.GetLearningUnitByID(quiz.LearningUnitID.String())
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "Learning unit not found"})
+		return
+	}
+
+	enrollment, err := h.enrollmentStore.GetEnrollmentByStudentAndCourse(userID.String(), unit.CourseID.String())
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to verify enrollment"})
+		return
+	}
+	if enrollment == nil || enrollment.Status != models.EnrollmentStatusEnrolled {
+		c.JSON(http.StatusForbidden, gin.H{"error": "Enrollment required"})
+		return
+	}
+
+	attempt, err := h.quizService.SubmitQuizAttempt(c.Request.Context(), quizID, userID, req.Answers)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
 	c.JSON(http.StatusCreated, gin.H{
 		"message":      "Quiz submitted successfully",
-		"quiz_id":      quizID,
-		"student_id":   userID,
-		"score":        0.0, // Placeholder score
-		"submitted_at": "2024-01-01T00:00:00Z", // Placeholder timestamp
+		"quiz_id":      attempt.QuizID,
+		"student_id":   attempt.StudentID,
+		"attempt_no":   attempt.AttemptNo,
+		"score":        attempt.Score,
+		"max_score":    attempt.MaxScore,
+		"submitted_at": attempt.CreatedAt,
 	})
 }
