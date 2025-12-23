@@ -1,8 +1,10 @@
 package services
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -101,6 +103,64 @@ func (s *QuizService) DeleteQuiz(quizID string) error {
 	}
 
 	return s.quizStore.DeleteQuiz(quizID)
+}
+
+func (s *QuizService) SubmitQuizAttempt(
+	ctx context.Context,
+	quizID uuid.UUID,
+	studentID uuid.UUID,
+	answers []models.QuizSubmissionAnswer,
+) (*models.QuizAttempt, error) {
+	quiz, err := s.quizStore.GetQuizByID(quizID.String())
+	if err != nil {
+		return nil, err
+	}
+
+	var quizData models.QuizData
+	if err := json.Unmarshal(quiz.QuizData, &quizData); err != nil {
+		return nil, fmt.Errorf("invalid quiz data: %w", err)
+	}
+
+	questionsByID := make(map[string]models.QuizQuestion, len(quizData.Questions))
+	maxScore := 0
+	for _, q := range quizData.Questions {
+		questionsByID[q.ID] = q
+		points := q.Points
+		if points <= 0 {
+			points = 1
+		}
+		maxScore += points
+	}
+
+	score := 0
+	for _, a := range answers {
+		q, ok := questionsByID[a.QuestionID]
+		if !ok {
+			continue
+		}
+		if strings.TrimSpace(a.Answer) == strings.TrimSpace(q.Answer) {
+			points := q.Points
+			if points <= 0 {
+				points = 1
+			}
+			score += points
+		}
+	}
+
+	answersJSON, err := json.Marshal(answers)
+	if err != nil {
+		return nil, fmt.Errorf("failed to marshal answers: %w", err)
+	}
+
+	attempt := &models.QuizAttempt{
+		QuizID:    quizID,
+		StudentID: studentID,
+		Answers:   answersJSON,
+		Score:     score,
+		MaxScore:  maxScore,
+	}
+
+	return s.quizStore.CreateQuizAttempt(ctx, attempt)
 }
 
 // CreateFlashcardSet handles flashcard set creation business logic

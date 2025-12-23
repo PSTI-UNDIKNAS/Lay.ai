@@ -70,6 +70,7 @@ func SetupRoutes(db *pgxpool.Pool) *gin.Engine {
 		assignmentService,
 		quizService,
 		submissionService,
+		enrollmentStore,
 	)
 	enrollmentHandler := handlers.NewEnrollmentHandler(enrollmentService)
 	aiHandler := handlers.NewAIHandler(aiService)
@@ -160,6 +161,13 @@ func SetupRoutes(db *pgxpool.Pool) *gin.Engine {
 			learningUnits.DELETE("/:unitId", middleware.LecturerOnlyMiddleware(authService), learningUnitHandler.DeleteLearningUnit)
 			learningUnits.GET("/:unitId/assignments", middleware.LecturerOnlyMiddleware(authService), learningUnitHandler.GetAssignments)
 			learningUnits.POST("/:unitId/assignments", middleware.LecturerOnlyMiddleware(authService), learningUnitHandler.CreateAssignment)
+			learningUnits.PUT("/:unitId/assignments/:assignmentId", middleware.LecturerOnlyMiddleware(authService), learningUnitHandler.UpdateAssignment)
+			learningUnits.DELETE("/:unitId/assignments/:assignmentId", middleware.LecturerOnlyMiddleware(authService), learningUnitHandler.DeleteAssignment)
+			learningUnits.GET("/:unitId/quizzes", middleware.LecturerOnlyMiddleware(authService), learningUnitHandler.GetQuizzes)
+			learningUnits.POST("/:unitId/quizzes", middleware.LecturerOnlyMiddleware(authService), learningUnitHandler.CreateQuiz)
+			learningUnits.PUT("/:unitId/quizzes/:quizId", middleware.LecturerOnlyMiddleware(authService), learningUnitHandler.UpdateQuiz)
+			learningUnits.DELETE("/:unitId/quizzes/:quizId", middleware.LecturerOnlyMiddleware(authService), learningUnitHandler.DeleteQuiz)
+			learningUnits.GET("/:unitId/quizzes/:quizId/attempts", middleware.LecturerOnlyMiddleware(authService), learningUnitHandler.GetQuizAttempts)
 			learningUnits.GET("/:unitId/assignments/:assignmentId/submissions", middleware.LecturerOnlyMiddleware(authService), learningUnitHandler.GetAssignmentSubmissions)
 			learningUnits.GET("/:unitId/assignments/:assignmentId/submissions/:submissionId/download", middleware.LecturerOnlyMiddleware(authService), learningUnitHandler.DownloadSubmission)
 

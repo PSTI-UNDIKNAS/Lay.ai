@@ -384,3 +384,111 @@ func (s *QuizStore) CountQuizzesByLearningUnitIDs(unitIDs []uuid.UUID) (map[uuid
 
 	return counts, nil
 }
+
+func (s *QuizStore) NextQuizAttemptNumber(ctx context.Context, quizID uuid.UUID, studentID uuid.UUID) (int, error) {
+	var next int
+	err := s.db.QueryRow(
+		ctx,
+		`SELECT COALESCE(MAX(attempt_no), 0) + 1 FROM quiz_attempts WHERE quiz_id = $1 AND student_id = $2`,
+		quizID,
+		studentID,
+	).Scan(&next)
+	if err != nil {
+		return 0, fmt.Errorf("failed to get next quiz attempt number: %w", err)
+	}
+	return next, nil
+}
+
+func (s *QuizStore) CreateQuizAttempt(ctx context.Context, attempt *models.QuizAttempt) (*models.QuizAttempt, error) {
+	if attempt == nil {
+		return nil, fmt.Errorf("attempt is required")
+	}
+	if attempt.QuizID == uuid.Nil || attempt.StudentID == uuid.Nil {
+		return nil, fmt.Errorf("quiz_id and student_id are required")
+	}
+
+	nextAttemptNo, err := s.NextQuizAttemptNumber(ctx, attempt.QuizID, attempt.StudentID)
+	if err != nil {
+		return nil, err
+	}
+
+	query := `
+		INSERT INTO quiz_attempts (quiz_id, student_id, attempt_no, answers, score, max_score)
+		VALUES ($1, $2, $3, $4, $5, $6)
+		RETURNING id, created_at
+	`
+
+	attempt.AttemptNo = nextAttemptNo
+
+	err = s.db.QueryRow(
+		ctx,
+		query,
+		attempt.QuizID,
+		attempt.StudentID,
+		attempt.AttemptNo,
+		attempt.Answers,
+		attempt.Score,
+		attempt.MaxScore,
+	).Scan(&attempt.ID, &attempt.CreatedAt)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create quiz attempt: %w", err)
+	}
+
+	return attempt, nil
+}
+
+func (s *QuizStore) GetQuizAttemptsByQuizID(ctx context.Context, quizID uuid.UUID, limit, offset int) ([]*models.QuizAttempt, error) {
+	var query strings.Builder
+	var args []interface{}
+	argIndex := 1
+
+	query.WriteString(`
+		SELECT id, quiz_id, student_id, attempt_no, NULL::jsonb AS answers, score, max_score, created_at
+		FROM quiz_attempts
+		WHERE quiz_id = $1
+		ORDER BY created_at DESC
+	`)
+	args = append(args, quizID)
+	argIndex++
+
+	if limit > 0 {
+		query.WriteString(fmt.Sprintf(" LIMIT $%d", argIndex))
+		args = append(args, limit)
+		argIndex++
+	}
+
+	if offset > 0 {
+		query.WriteString(fmt.Sprintf(" OFFSET $%d", argIndex))
+		args = append(args, offset)
+	}
+
+	rows, err := s.db.Query(ctx, query.String(), args...)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get quiz attempts: %w", err)
+	}
+	defer rows.Close()
+
+	var attempts []*models.QuizAttempt
+	for rows.Next() {
+		var a models.QuizAttempt
+		if err := rows.Scan(
+			&a.ID,
+			&a.QuizID,
+			&a.StudentID,
+			&a.AttemptNo,
+			&a.Answers,
+			&a.Score,
+			&a.MaxScore,
+			&a.CreatedAt,
+		); err != nil {
+			return nil, fmt.Errorf("failed to scan quiz attempt: %w", err)
+		}
+		attempts = append(attempts, &a)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("failed to iterate quiz attempts: %w", err)
+	}
+
+	return attempts, nil
+}
