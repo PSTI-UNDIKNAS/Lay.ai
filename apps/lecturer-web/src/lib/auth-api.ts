@@ -342,6 +342,63 @@ async function getCourseAccessRequests(courseId: string): Promise<CourseAccessRe
   return [];
 }
 
+export async function getCourseEnrolledStudentCount(courseId: string): Promise<number> {
+  const response = await fetch(`${API_BASE_URL}/courses/${courseId}/students/count`, {
+    method: 'GET',
+    headers: {
+      Accept: 'application/json',
+      ...getAuthHeaders(),
+    },
+  });
+
+  const data = await response.json().catch(() => ({}));
+
+  if (!response.ok) {
+    const msg = data?.error || data?.message || 'Failed to fetch enrolled student count';
+    throw new Error(msg);
+  }
+
+  if (typeof data?.count === 'number') {
+    return data.count;
+  }
+
+  return 0;
+}
+
+export interface EnrolledStudent {
+  id: string;
+  name: string;
+  email: string;
+  unique_identifier: string;
+  role: string;
+  status: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export async function getCourseEnrolledStudents(courseId: string): Promise<EnrolledStudent[]> {
+  const response = await fetch(`${API_BASE_URL}/courses/${courseId}/students`, {
+    method: 'GET',
+    headers: {
+      Accept: 'application/json',
+      ...getAuthHeaders(),
+    },
+  });
+
+  const data = await response.json().catch(() => ({}));
+
+  if (!response.ok) {
+    const msg = data?.error || data?.message || 'Failed to fetch enrolled students';
+    throw new Error(msg);
+  }
+
+  if (Array.isArray(data?.students)) {
+    return data.students as EnrolledStudent[];
+  }
+
+  return [];
+}
+
 export interface LecturerDashboardStats {
   totalCourses: number;
   totalStudents: number;

@@ -31,11 +31,13 @@ import {
   createLearningUnitQuiz,
   deleteLearningUnitAssignment,
   deleteLearningUnitQuiz,
+  getCourseEnrolledStudentCount,
   getCourseLearningUnits,
   getCourseLearningUnitSummaries,
   getLearningUnitAssignments,
   getLearningUnitDocuments,
   getLearningUnitQuizzes,
+  getMe,
   getMyCourses,
   createLearningUnit,
   updateLearningUnitAssignment,
@@ -63,6 +65,12 @@ export default function CourseDetailPage() {
   const [loadingUnits, setLoadingUnits] = useState(false);
   const [loadingCourse, setLoadingCourse] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  const [studentCount, setStudentCount] = useState<number | null>(null);
+  const [loadingStudentCount, setLoadingStudentCount] = useState(false);
+  const [lecturerName, setLecturerName] = useState('');
+  const [lecturerEmail, setLecturerEmail] = useState('');
+  const [loadingLecturer, setLoadingLecturer] = useState(false);
 
   const [createOpen, setCreateOpen] = useState(false);
   const [unitTitle, setUnitTitle] = useState('');
@@ -311,6 +319,54 @@ export default function CourseDetailPage() {
       .finally(() => {
         if (!mounted) return;
         setLoadingCourse(false);
+      });
+
+    return () => {
+      mounted = false;
+    };
+  }, [courseId]);
+
+  useEffect(() => {
+    let mounted = true;
+    setLoadingLecturer(true);
+    getMe()
+      .then((res) => {
+        if (!mounted) return;
+        setLecturerName(res.user.name ?? '');
+        setLecturerEmail(res.user.email ?? '');
+      })
+      .catch(() => {
+        if (!mounted) return;
+        setLecturerName('');
+        setLecturerEmail('');
+      })
+      .finally(() => {
+        if (!mounted) return;
+        setLoadingLecturer(false);
+      });
+
+    return () => {
+      mounted = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!courseId) return;
+    let mounted = true;
+    setLoadingStudentCount(true);
+
+    getCourseEnrolledStudentCount(courseId)
+      .then((count) => {
+        if (!mounted) return;
+        setStudentCount(count);
+      })
+      .catch(() => {
+        if (!mounted) return;
+        setStudentCount(null);
+      })
+      .finally(() => {
+        if (!mounted) return;
+        setLoadingStudentCount(false);
       });
 
     return () => {
@@ -900,57 +956,84 @@ export default function CourseDetailPage() {
             Back to courses
           </button>
 
-          <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+          <div className="space-y-4">
             <div className="space-y-1">
-              <h1 className="text-2xl font-semibold text-zinc-900">Learning Units</h1>
-              <div className="text-sm text-zinc-600">
+              <h1 className="text-2xl font-semibold text-zinc-900">
                 {course?.title || (loadingCourse ? 'Loading course...' : 'Course')}
+              </h1>
+              <div className="text-sm text-zinc-600">
+                {course?.description || (loadingCourse ? 'Loading description...' : '—')}
               </div>
             </div>
 
-            <div className="flex w-full flex-col gap-3 md:w-auto md:flex-row md:items-center md:justify-end">
-              <div className="relative w-full md:w-[320px]">
-                <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-zinc-500" />
-                <Input
-                  value={unitQuery}
-                  onChange={(e) => setUnitQuery(e.target.value)}
-                  placeholder="Search units..."
-                  className="pl-9"
-                />
+            <div className="grid gap-2 text-sm text-zinc-600 sm:grid-cols-2">
+              <div className="flex items-center gap-2">
+                <Users className="h-4 w-4 text-zinc-500" />
+                <div>
+                  Students:{' '}
+                  {loadingStudentCount
+                    ? 'Loading...'
+                    : studentCount != null
+                      ? studentCount
+                      : '—'}
+                </div>
               </div>
-              {isEditMode ? (
-                <>
-                  <Button
-                    variant="outline"
-                    onClick={() => {
-                      setCourseTitle(course?.title ?? '');
-                      setCourseDescription(course?.description ?? '');
-                      setCourseAccessType((course?.access_type as 'public' | 'password' | 'by_request') || 'public');
-                      setCourseEditOpen(true);
-                    }}
-                  >
-                    Edit Course
-                  </Button>
-                  <Button
-                    variant="outline"
-                    className="border-zinc-900 bg-zinc-900 text-white hover:bg-zinc-800 hover:text-white"
-                    onClick={() => {
-                      setCreatedMessage(null);
-                      setCreateOpen(true);
-                    }}
-                  >
-                    <Plus className="mr-2 h-4 w-4" />
-                    Add Unit
-                  </Button>
-                </>
-              ) : (
-                <Button
-                  variant="outline"
-                  onClick={() => router.push(`/courses/${courseId}?mode=edit`)}
-                >
-                  Edit
-                </Button>
-              )}
+              <div className="space-y-1">
+                <div>
+                  Lecturer:{' '}
+                  {loadingLecturer ? 'Loading...' : lecturerName || '—'}
+                </div>
+                <div>
+                  Lecturer email:{' '}
+                  {loadingLecturer ? 'Loading...' : lecturerEmail || '—'}
+                </div>
+              </div>
+            </div>
+
+            <div className="h-px w-full bg-zinc-200" />
+
+            <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+              <div className="space-y-1">
+                <h2 className="text-2xl font-semibold text-zinc-900">Learning Units</h2>
+              </div>
+
+              <div className="flex w-full flex-col gap-3 md:w-auto md:flex-row md:items-center md:justify-end">
+                <div className="relative w-full md:w-[320px]">
+                  <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-zinc-500" />
+                  <Input
+                    value={unitQuery}
+                    onChange={(e) => setUnitQuery(e.target.value)}
+                    placeholder="Search units..."
+                    className="pl-9"
+                  />
+                </div>
+                {isEditMode && (
+                  <>
+                    <Button
+                      variant="outline"
+                      onClick={() => {
+                        setCourseTitle(course?.title ?? '');
+                        setCourseDescription(course?.description ?? '');
+                        setCourseAccessType((course?.access_type as 'public' | 'password' | 'by_request') || 'public');
+                        setCourseEditOpen(true);
+                      }}
+                    >
+                      Edit Course
+                    </Button>
+                    <Button
+                      variant="outline"
+                      className="border-zinc-900 bg-zinc-900 text-white hover:bg-zinc-800 hover:text-white"
+                      onClick={() => {
+                        setCreatedMessage(null);
+                        setCreateOpen(true);
+                      }}
+                    >
+                      <Plus className="mr-2 h-4 w-4" />
+                      Add Unit
+                    </Button>
+                  </>
+                )}
+              </div>
             </div>
           </div>
         </div>

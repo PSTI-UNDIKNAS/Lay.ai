@@ -1,53 +1,33 @@
 "use client";
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import LecturerShell from '@/components/lecturer/LecturerShell';
 import StatCard from '@/components/lecturer/StatCard';
 import Card from '@/components/lecturer/Card';
 import { Users, UserCheck, UserX, Search as SearchIcon } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
+import { getCourseEnrolledStudents, getMyCourses, LecturerCourse } from '@/lib/auth-api';
 
 type StudentStatus = 'active' | 'inactive';
 
 interface StudentRow {
   id: string;
+  studentId: string;
   name: string;
-  course: string;
+  email: string;
+  nim: string;
+  courseId: string;
+  courseTitle: string;
   lastActive: string;
   status: StudentStatus;
 }
 
-const studentsData: StudentRow[] = [
-  {
-    id: '1',
-    name: 'John Smith',
-    course: 'Web Development Fundamentals',
-    lastActive: '2024-01-20 14:30',
-    status: 'active',
-  },
-  {
-    id: '2',
-    name: 'Emily Davis',
-    course: 'AI for Educators',
-    lastActive: '2024-01-19 16:10',
-    status: 'active',
-  },
-  {
-    id: '3',
-    name: 'Michael Brown',
-    course: 'Advanced Algorithms',
-    lastActive: '2024-01-15 09:45',
-    status: 'inactive',
-  },
-  {
-    id: '4',
-    name: 'Sarah Johnson',
-    course: 'Web Development Fundamentals',
-    lastActive: '2024-01-18 11:20',
-    status: 'active',
-  },
-];
+function formatDateTime(value: string) {
+  const d = new Date(value);
+  if (Number.isNaN(d.getTime())) return '—';
+  return d.toLocaleString();
+}
 
 function statusBadge(status: StudentStatus) {
   const base = 'inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium border';
@@ -60,34 +40,94 @@ function statusBadge(status: StudentStatus) {
 }
 
 export default function MyStudentsPage() {
+  const [courses, setCourses] = useState<LecturerCourse[]>([]);
+  const [rows, setRows] = useState<StudentRow[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [courseFilter, setCourseFilter] = useState<string>('all');
   const [statusFilter, setStatusFilter] = useState<'all' | StudentStatus>('all');
 
-  const stats = {
-    totalStudents: studentsData.length,
-    activeStudents: studentsData.filter((s) => s.status === 'active').length,
-    inactiveStudents: studentsData.filter((s) => s.status === 'inactive').length,
-  };
+  useEffect(() => {
+    let mounted = true;
+    Promise.resolve().then(() => {
+      if (!mounted) return;
+      setLoading(true);
+      setError(null);
+    });
 
-  const courses = useMemo(
-    () => Array.from(new Set(studentsData.map((s) => s.course))).sort(),
-    [],
+    getMyCourses(200, 0)
+      .then(async (data) => {
+        if (!mounted) return;
+        setCourses(data);
+        const grouped = await Promise.all(
+          data.map(async (course) => {
+            const students = await getCourseEnrolledStudents(course.id);
+            return students.map((s): StudentRow => {
+              const status: StudentStatus = s.status === 'active' ? 'active' : 'inactive';
+              return {
+                id: `${course.id}:${s.id}`,
+                studentId: s.id,
+                name: s.name,
+                email: s.email,
+                nim: s.unique_identifier,
+                courseId: course.id,
+                courseTitle: course.title,
+                lastActive: formatDateTime(s.updated_at),
+                status,
+              };
+            });
+          }),
+        );
+        if (!mounted) return;
+        setRows(grouped.flat());
+      })
+      .catch((err: unknown) => {
+        if (!mounted) return;
+        setError(err instanceof Error ? err.message : 'Failed to load students');
+      })
+      .finally(() => {
+        if (!mounted) return;
+        setLoading(false);
+      });
+
+    return () => {
+      mounted = false;
+    };
+  }, []);
+
+  const uniqueStudents = useMemo(() => {
+    const map = new Map<string, StudentRow>();
+    for (const r of rows) {
+      if (!map.has(r.studentId)) map.set(r.studentId, r);
+    }
+    return Array.from(map.values());
+  }, [rows]);
+
+  const stats = useMemo(
+    () => ({
+      totalStudents: uniqueStudents.length,
+      activeStudents: uniqueStudents.filter((s) => s.status === 'active').length,
+      inactiveStudents: uniqueStudents.filter((s) => s.status === 'inactive').length,
+    }),
+    [uniqueStudents],
   );
 
   const filteredStudents = useMemo(
     () =>
-      studentsData.filter((student) => {
+      rows.filter((student) => {
         const matchesSearch =
           !searchTerm ||
-          student.name.toLowerCase().includes(searchTerm.toLowerCase());
+          student.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+          student.email.toLowerCase().includes(searchTerm.toLowerCase()) ||
+          student.nim.toLowerCase().includes(searchTerm.toLowerCase());
         const matchesCourse =
-          courseFilter === 'all' || student.course === courseFilter;
+          courseFilter === 'all' || student.courseId === courseFilter;
         const matchesStatus =
           statusFilter === 'all' || student.status === statusFilter;
         return matchesSearch && matchesCourse && matchesStatus;
       }),
-    [searchTerm, courseFilter, statusFilter],
+    [rows, searchTerm, courseFilter, statusFilter],
   );
 
   return (
@@ -151,8 +191,8 @@ export default function MyStudentsPage() {
                 >
                   <option value="all">All courses</option>
                   {courses.map((course) => (
-                    <option key={course} value={course}>
-                      {course}
+                    <option key={course.id} value={course.id}>
+                      {course.title}
                     </option>
                   ))}
                 </select>
@@ -179,11 +219,17 @@ export default function MyStudentsPage() {
         </Card>
 
         <Card>
+          {error && (
+            <div className="mb-4 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+              {error}
+            </div>
+          )}
           <div className="overflow-x-auto">
             <table className="min-w-full text-left text-sm text-zinc-700">
               <thead>
                 <tr className="border-b border-zinc-200 bg-zinc-50 text-xs font-medium uppercase tracking-wide text-zinc-500">
                   <th className="px-4 py-3">Student</th>
+                  <th className="px-4 py-3">NIM</th>
                   <th className="px-4 py-3">Course</th>
                   <th className="px-4 py-3">Last Active</th>
                   <th className="px-4 py-3">Status</th>
@@ -191,16 +237,34 @@ export default function MyStudentsPage() {
                 </tr>
               </thead>
               <tbody>
+                {loading && filteredStudents.length === 0 && (
+                  <tr>
+                    <td
+                      className="px-4 py-6 text-center text-sm text-zinc-500"
+                      colSpan={6}
+                    >
+                      Loading students...
+                    </td>
+                  </tr>
+                )}
                 {filteredStudents.map((student) => (
                   <tr
                     key={student.id}
                     className="border-b border-zinc-100 last:border-0 hover:bg-zinc-50"
                   >
-                    <td className="px-4 py-3 text-sm font-medium text-zinc-900">
-                      {student.name}
+                    <td className="px-4 py-3">
+                      <div className="text-sm font-medium text-zinc-900">
+                        {student.name}
+                      </div>
+                      <div className="mt-1 text-xs text-zinc-500">
+                        {student.email}
+                      </div>
                     </td>
                     <td className="px-4 py-3 text-sm text-zinc-700">
-                      {student.course}
+                      {student.nim || '—'}
+                    </td>
+                    <td className="px-4 py-3 text-sm text-zinc-700">
+                      {student.courseTitle}
                     </td>
                     <td className="px-4 py-3 text-sm text-zinc-600">
                       {student.lastActive}
@@ -213,11 +277,11 @@ export default function MyStudentsPage() {
                     </td>
                   </tr>
                 ))}
-                {filteredStudents.length === 0 && (
+                {!loading && filteredStudents.length === 0 && (
                   <tr>
                     <td
                       className="px-4 py-6 text-center text-sm text-zinc-500"
-                      colSpan={5}
+                      colSpan={6}
                     >
                       No students found for the current filters.
                     </td>
