@@ -148,6 +148,7 @@ func SetupRoutes(db *pgxpool.Pool) *gin.Engine {
 			courses.POST("/:courseId/request-access", middleware.AuthWithStatusMiddleware(authService), middleware.StudentOnlyMiddleware(authService), enrollmentHandler.RequestAccess)
 			courses.GET("/:courseId/access-requests", middleware.AuthWithStatusMiddleware(authService), middleware.LecturerOnlyMiddleware(authService), middleware.CourseOwnershipMiddleware(courseService), enrollmentHandler.GetAccessRequests)
 			courses.GET("/:courseId/students/count", middleware.AuthWithStatusMiddleware(authService), middleware.LecturerOnlyMiddleware(authService), middleware.CourseOwnershipMiddleware(courseService), enrollmentHandler.GetEnrolledStudentCount)
+			courses.GET("/:courseId/students", middleware.AuthWithStatusMiddleware(authService), middleware.LecturerOnlyMiddleware(authService), middleware.CourseOwnershipMiddleware(courseService), enrollmentHandler.GetEnrolledStudents)
 			courses.DELETE("/:courseId/unenroll", middleware.AuthWithStatusMiddleware(authService), middleware.StudentOnlyMiddleware(authService), enrollmentHandler.UnenrollFromCourse)
 		}
 
