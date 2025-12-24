@@ -112,6 +112,23 @@ func (h *EnrollmentHandler) GetAccessRequests(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"requests": requests})
 }
 
+func (h *EnrollmentHandler) GetEnrolledStudentCount(c *gin.Context) {
+	courseIDStr := c.Param("courseId")
+	courseID, err := uuid.Parse(courseIDStr)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid course ID"})
+		return
+	}
+
+	count, err := h.enrollmentService.CountEnrolledStudents(courseID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to fetch enrolled student count"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"count": count})
+}
+
 // ApproveAccessRequest handles POST /api/access-requests/{requestId}/approve - Lecturer only (course owner)
 func (h *EnrollmentHandler) ApproveAccessRequest(c *gin.Context) {
 	// Get user from context (set by auth middleware)

@@ -105,6 +105,10 @@ func (s *EnrollmentService) GetAccessRequests(courseID uuid.UUID) ([]*models.Enr
 	return s.enrollmentStore.GetEnrollments(nil, &courseIDStr, &status, 50, 0)
 }
 
+func (s *EnrollmentService) CountEnrolledStudents(courseID uuid.UUID) (int, error) {
+	return s.enrollmentStore.CountEnrolledStudentsByCourseID(courseID.String())
+}
+
 // ApproveAccessRequest handles lecturer approving/denying access requests
 func (s *EnrollmentService) ApproveAccessRequest(lecturerID, requestID uuid.UUID, approved bool) error {
 	// Get the enrollment request

@@ -280,3 +280,19 @@ func (s *EnrollmentStore) GetEnrolledStudentsByCourseID(courseID string) ([]*mod
 
 	return students, nil
 }
+
+func (s *EnrollmentStore) CountEnrolledStudentsByCourseID(courseID string) (int, error) {
+	query := `
+		SELECT COUNT(*)
+		FROM enrollments e
+		WHERE e.course_id = $1 AND e.status = $2
+	`
+
+	var count int
+	err := s.db.QueryRow(context.Background(), query, courseID, models.EnrollmentStatusEnrolled).Scan(&count)
+	if err != nil {
+		return 0, fmt.Errorf("failed to count enrolled students: %w", err)
+	}
+
+	return count, nil
+}
