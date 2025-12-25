@@ -40,6 +40,10 @@ export default function AiChatbotPage() {
   const searchParams = useSearchParams();
   const selectedConversationId = searchParams.get('conversationId');
 
+  type Lens = 'default' | 'academic' | 'feynman' | 'practitioner';
+  const LENS_STORAGE_KEY = 'ai-chat-lens:v1';
+  const [lens, setLens] = useState<Lens>('default');
+
   const [conversations, setConversations] = useState<AIConversation[]>([]);
   const [loadingConversations, setLoadingConversations] = useState(false);
   const [conversationError, setConversationError] = useState<string | null>(null);
@@ -50,6 +54,28 @@ export default function AiChatbotPage() {
   const [renameTitle, setRenameTitle] = useState('');
   const [renameLoading, setRenameLoading] = useState(false);
   const [deleteLoadingId, setDeleteLoadingId] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    try {
+      const saved = localStorage.getItem(LENS_STORAGE_KEY);
+      if (
+        saved === 'default' ||
+        saved === 'academic' ||
+        saved === 'feynman' ||
+        saved === 'practitioner'
+      ) {
+        setLens(saved);
+      }
+    } catch {}
+  }, []);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    try {
+      localStorage.setItem(LENS_STORAGE_KEY, lens);
+    } catch {}
+  }, [lens]);
 
   useEffect(() => {
     let mounted = true;
@@ -191,6 +217,7 @@ export default function AiChatbotPage() {
     Array<{ id: string; role: 'assistant' | 'user'; content: string; pending?: boolean }>
   >([]);
   const [suggestions, setSuggestions] = useState<Array<{ id: string; title: string; tag: string }>>([]);
+  const [askedSuggestionIds, setAskedSuggestionIds] = useState<string[]>([]);
   const [sending, setSending] = useState(false);
 
   const messagesEndRef = useRef<HTMLDivElement | null>(null);
@@ -206,6 +233,7 @@ export default function AiChatbotPage() {
     kbUnitIds: string[];
     messages: Array<{ id: string; role: 'assistant' | 'user'; content: string }>;
     suggestions: Array<{ id: string; title: string; tag: string }>;
+    askedSuggestionIds: string[];
   } | null {
     if (typeof window === 'undefined') return null;
     try {
@@ -217,6 +245,7 @@ export default function AiChatbotPage() {
         kbUnitIds?: unknown;
         messages?: unknown;
         suggestions?: unknown;
+        askedSuggestionIds?: unknown;
       };
       if (!parsed || typeof parsed !== 'object') return null;
       if (typeof parsed.expiresAt === 'number' && Date.now() > parsed.expiresAt) {
@@ -263,7 +292,11 @@ export default function AiChatbotPage() {
             })) as Array<{ id: string; title: string; tag: string }>)
         : [];
 
-      return { kbCourseIds, kbUnitIds, messages, suggestions };
+      const askedSuggestionIds = Array.isArray(parsed.askedSuggestionIds)
+        ? (parsed.askedSuggestionIds.filter((x) => typeof x === 'string') as string[])
+        : [];
+
+      return { kbCourseIds, kbUnitIds, messages, suggestions, askedSuggestionIds };
     } catch {
       return null;
     }
@@ -283,6 +316,7 @@ export default function AiChatbotPage() {
           kbUnitIds: payload.kbUnitIds,
           messages: Array.isArray(payload.messages) ? payload.messages.slice(-200) : [],
           suggestions: Array.isArray(payload.suggestions) ? payload.suggestions.slice(-20) : [],
+          askedSuggestionIds: askedSuggestionIds.slice(-50),
         }),
       );
     } catch {}
@@ -312,6 +346,7 @@ export default function AiChatbotPage() {
     setKbUnitsLoadingByCourse({});
     setMessages([]);
     setSuggestions([]);
+    setAskedSuggestionIds([]);
     setSending(false);
     setChatInput('');
     setKbOpen(false);
@@ -321,6 +356,7 @@ export default function AiChatbotPage() {
     if (cached) {
       setMessages(cached.messages);
       setSuggestions(cached.suggestions);
+      setAskedSuggestionIds(cached.askedSuggestionIds);
       if (cached.kbUnitIds.length > 0) {
         setKbSelectedCourseIds(cached.kbCourseIds);
         setKbSelectedUnitIds(cached.kbUnitIds);
@@ -383,7 +419,15 @@ export default function AiChatbotPage() {
       messages,
       suggestions,
     });
-  }, [selectedConversationId, kbApplied, kbAppliedCourseIds, kbAppliedUnitIds, messages, suggestions]);
+  }, [
+    selectedConversationId,
+    kbApplied,
+    kbAppliedCourseIds,
+    kbAppliedUnitIds,
+    messages,
+    suggestions,
+    askedSuggestionIds,
+  ]);
 
   useEffect(() => {
     if (!kbChangeNotice) return;
@@ -687,6 +731,7 @@ export default function AiChatbotPage() {
 
       if (nextUnitIds.length === 0) {
         setSuggestions([]);
+        setAskedSuggestionIds([]);
         setKbChangeNotice('Knowledge base cleared');
         return;
       }
@@ -722,6 +767,7 @@ export default function AiChatbotPage() {
             'Keep it concise (max 12 top-level bullets total).\n\n' +
             formattingRules,
           top_k: 12,
+          lens,
           learning_unit_ids: nextUnitIds,
         });
         setMessages([{ id: `m-${Date.now()}-summary`, role: 'assistant', content: summary.answer }]);
@@ -730,20 +776,22 @@ export default function AiChatbotPage() {
       setSuggestions([]);
       const suggestionResp = await answerAI({
         query:
-          'Generate 5 suggested questions a lecturer can ask based on the selected knowledge base.\n' +
+          'Generate 10 suggested questions a lecturer can ask based on the selected knowledge base.\n' +
           'Return ONLY a valid JSON array of strings.\n' +
           'No markdown. No explanation. No numbering. No extra keys.',
         top_k: 12,
+        lens,
         learning_unit_ids: nextUnitIds,
       });
       const titles = parseSuggestions(suggestionResp.answer);
       setSuggestions(
-        titles.slice(0, 5).map((t, idx) => ({
+        titles.slice(0, 10).map((t, idx) => ({
           id: `s-${idx}-${Date.now()}`,
           title: t,
           tag: 'suggestion',
         })),
       );
+      setAskedSuggestionIds([]);
 
       setKbChangeNotice(kbChanged ? 'Knowledge base updated' : 'Knowledge base applied');
     } catch (err) {
@@ -766,6 +814,12 @@ export default function AiChatbotPage() {
 
     setSending(true);
     setChatInput('');
+    const matchedSuggestion = suggestions.find((s) => s.title.trim() === q);
+    if (matchedSuggestion) {
+      setAskedSuggestionIds((prev) =>
+        prev.includes(matchedSuggestion.id) ? prev : [...prev, matchedSuggestion.id],
+      );
+    }
     const now = Date.now();
     const userMsgId = `m-${now}-user`;
     const pendingMsgId = `m-${now}-assistant-pending`;
@@ -783,6 +837,7 @@ export default function AiChatbotPage() {
       const resp = await answerAI({
         query: q,
         top_k: 10,
+        lens,
         learning_unit_ids: kbAppliedUnitIds,
       });
       setMessages((prev) =>
@@ -1126,6 +1181,24 @@ export default function AiChatbotPage() {
                         )}
                       </div>
                     </div>
+                    <div>
+                      <h3 className="text-sm font-semibold text-zinc-900">
+                        Lens
+                      </h3>
+                      <div className="mt-3 space-y-2">
+                        <select
+                          className="w-full rounded-md border border-zinc-200 bg-white px-3 py-2 text-sm text-zinc-900 shadow-sm outline-none ring-zinc-900/5 focus-visible:ring-2"
+                          value={lens}
+                          onChange={(e) => setLens(e.target.value as Lens)}
+                          disabled={sending || kbApplying}
+                        >
+                          <option value="default">Default</option>
+                          <option value="academic">Academic</option>
+                          <option value="feynman">Feynman</option>
+                          <option value="practitioner">Practitioner</option>
+                        </select>
+                      </div>
+                    </div>
                     <div className="rounded-xl border border-zinc-200 bg-white p-4">
                       <h3 className="mb-3 text-sm font-semibold text-zinc-900">
                         Generate Knowledge
@@ -1408,18 +1481,28 @@ export default function AiChatbotPage() {
                     No suggestions yet. Apply a knowledge base to generate them.
                   </div>
                 ) : (
-                  suggestions.map((s) => (
+                  suggestions.map((s, idx) => {
+                    const asked = askedSuggestionIds.includes(s.id);
+                    return (
                     <button
                       key={s.id}
                       type="button"
-                      className="flex w-full items-start justify-between rounded-lg border border-zinc-200 bg-white p-4 text-left hover:bg-zinc-50"
+                      className={`flex w-full items-start justify-between rounded-lg border p-4 text-left hover:bg-zinc-50 ${
+                        asked ? 'border-green-200 bg-green-50' : 'border-zinc-200 bg-white'
+                      }`}
                       onClick={() => {
                         setChatInput(s.title);
                         setSuggestOpen(false);
                       }}
                     >
                       <div className="flex items-start gap-3">
-                        <span className="mt-2 h-2 w-2 rounded-full bg-blue-500" />
+                        <span
+                          className={`mt-0.5 flex h-6 w-6 flex-none items-center justify-center rounded-full text-xs font-semibold ${
+                            asked ? 'bg-green-600 text-white' : 'bg-zinc-900 text-white'
+                          }`}
+                        >
+                          {idx + 1}
+                        </span>
                         <div>
                           <div className="text-sm font-medium text-zinc-900">
                             {s.title}
@@ -1430,7 +1513,8 @@ export default function AiChatbotPage() {
                         </div>
                       </div>
                     </button>
-                  ))
+                    );
+                  })
                 )}
               </div>
               <div className="flex items-center justify-between border-t border-zinc-200 px-6 py-4">
