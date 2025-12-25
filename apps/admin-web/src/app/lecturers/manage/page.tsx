@@ -6,7 +6,7 @@ import Card from '@/components/admin/Card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { CircleUser, Pencil, Trash2, MoreVertical } from 'lucide-react'
-import { getUsers, type AdminUser, type AdminUserStatus } from '@/lib/admin-api'
+import { deleteUser, getUsers, type AdminUser, type AdminUserStatus } from '@/lib/admin-api'
 import InviteUserModal from '@/components/admin/InviteUserModal'
 import EditUserModal from '@/components/admin/EditUserModal'
 
@@ -136,7 +136,21 @@ export default function ManageLecturerPage() {
                         <td className="px-4 py-4">
                           <div className="flex items-center gap-2">
                             <Button variant="outline" className="border-zinc-200 text-zinc-700 hover:bg-zinc-50" onClick={() => setEditingUser(row)}><Pencil className="h-4 w-4" /></Button>
-                            <Button variant="outline" className="border-red-200 text-red-700 hover:bg-red-50"><Trash2 className="h-4 w-4" /></Button>
+                            <Button
+                              variant="outline"
+                              className="border-red-200 text-red-700 hover:bg-red-50"
+                              onClick={async () => {
+                                if (!confirm('Delete this lecturer?')) return
+                                try {
+                                  await deleteUser(row.id)
+                                  setLecturers((list) => list.filter((u) => u.id !== row.id))
+                                } catch (e) {
+                                  alert(e instanceof Error ? e.message : 'Failed to delete user')
+                                }
+                              }}
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
                             <Button variant="outline" className="border-zinc-200 text-zinc-700 hover:bg-zinc-50"><MoreVertical className="h-4 w-4" /></Button>
                           </div>
                         </td>
