@@ -589,7 +589,7 @@ func (s *AIService) IngestPDF(ctx context.Context, originalFileName, newFileName
 
 // SearchSimilar embeds a query and returns top-k similar chunks from the DB.
 // If documentID is provided, the results are filtered to that document.
-func (s *AIService) SearchSimilar(ctx context.Context, query string, topK int, documentID *uuid.UUID) ([]store.SimilarChunk, error) {
+func (s *AIService) SearchSimilar(ctx context.Context, query string, topK int, documentID *uuid.UUID, learningUnitIDs []uuid.UUID) ([]store.SimilarChunk, error) {
 	if query == "" {
 		return nil, errors.New("query is required")
 	}
@@ -605,6 +605,9 @@ func (s *AIService) SearchSimilar(ctx context.Context, query string, topK int, d
 		return nil, errors.New("embedding failed")
 	}
 
+	if len(learningUnitIDs) > 0 {
+		return s.store.FindSimilarChunksByLearningUnits(ctx, vectors[0], topK, learningUnitIDs)
+	}
 	if documentID != nil {
 		return s.store.FindSimilarChunksByDocument(ctx, vectors[0], topK, *documentID)
 	}
@@ -720,13 +723,13 @@ func (s *AIService) embedTexts(ctx context.Context, texts []string) ([][]float32
 
 // AnswerQuery composes a prompt from top-K retrieved chunks and asks the LLM.
 // Returns the answer text and the sources used (chunks).
-func (s *AIService) AnswerQuery(ctx context.Context, query string, lens string, topK int, documentID *uuid.UUID) (string, []store.SimilarChunk, error) {
+func (s *AIService) AnswerQuery(ctx context.Context, query string, lens string, topK int, documentID *uuid.UUID, learningUnitIDs []uuid.UUID) (string, []store.SimilarChunk, error) {
 	if s.client == nil {
 		return "", nil, fmt.Errorf("genai client not initialized")
 	}
 
 	// Reuse existing retrieval to avoid re-implementing embeddings here.
-	results, err := s.SearchSimilar(ctx, query, topK, documentID)
+	results, err := s.SearchSimilar(ctx, query, topK, documentID, learningUnitIDs)
 	if err != nil {
 		return "", nil, fmt.Errorf("search similar failed: %w", err)
 	}

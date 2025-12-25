@@ -30,6 +30,7 @@ func SetupRoutes(db *pgxpool.Pool) *gin.Engine {
 	aiStore := store.NewAIStore(db)
 	generatedContentStore := store.NewGeneratedContentStore(db)
 	documentStore := store.NewDocumentStore(db)
+	aiConversationStore := store.NewAIConversationStore(db)
 
 	// Initialize services
 	authService := services.NewAuthService(userStore)
@@ -42,6 +43,7 @@ func SetupRoutes(db *pgxpool.Pool) *gin.Engine {
 	enrollmentService := services.NewEnrollmentService(enrollmentStore, courseStore)
 	documentService := services.NewDocumentService(documentStore)
 	aiService := services.NewAIService(aiStore, generatedContentStore, documentService)
+	aiConversationService := services.NewAIConversationService(aiConversationStore)
 
 	// Initialize handlers
 	authHandler := handlers.NewAuthHandler(authService)
@@ -75,6 +77,7 @@ func SetupRoutes(db *pgxpool.Pool) *gin.Engine {
 	enrollmentHandler := handlers.NewEnrollmentHandler(enrollmentService)
 	aiHandler := handlers.NewAIHandler(aiService)
 	quizHandler := handlers.NewQuizHandler(aiService, learningUnitService, courseService)
+	aiConversationHandler := handlers.NewAIConversationHandler(aiConversationService)
 
 	// API routes
 	v1 := router.Group("/api")
@@ -214,6 +217,16 @@ func SetupRoutes(db *pgxpool.Pool) *gin.Engine {
 			ai.POST("/ingest", aiHandler.IngestPDFHandler)
 			ai.POST("/search", aiHandler.SearchSimilarHandler)
 			ai.POST("/answer", aiHandler.AnswerHandler)
+
+			conversations := ai.Group("/conversations")
+			conversations.Use(middleware.AuthWithStatusMiddleware(authService))
+			conversations.Use(middleware.LecturerOnlyMiddleware(authService))
+			{
+				conversations.GET("", aiConversationHandler.ListConversations)
+				conversations.POST("", aiConversationHandler.CreateConversation)
+				conversations.PUT("/:conversationId", aiConversationHandler.UpdateConversation)
+				conversations.DELETE("/:conversationId", aiConversationHandler.DeleteConversation)
+			}
 		}
 	}
 

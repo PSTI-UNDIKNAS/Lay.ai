@@ -219,7 +219,7 @@ func (h *AIHandler) SearchSimilarHandler(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request body", "details": err.Error()})
 		return
 	}
-	results, err := h.svc.SearchSimilar(c.Request.Context(), req.Query, req.TopK, nil)
+	results, err := h.svc.SearchSimilar(c.Request.Context(), req.Query, req.TopK, nil, nil)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
@@ -229,10 +229,11 @@ func (h *AIHandler) SearchSimilarHandler(c *gin.Context) {
 
 // AnswerRequest defines the body for /ai/answer.
 type AnswerRequest struct {
-	Query      string  `json:"query" binding:"required"`
-	Lens       string  `json:"lens,omitempty"`        // optional lens
-	TopK       *int    `json:"top_k,omitempty"`       // default 5
-	DocumentID *string `json:"document_id,omitempty"` // optional filter
+	Query           string   `json:"query" binding:"required"`
+	Lens            string   `json:"lens,omitempty"`              // optional lens
+	TopK            *int     `json:"top_k,omitempty"`             // default 5
+	DocumentID      *string  `json:"document_id,omitempty"`       // optional filter
+	LearningUnitIDs []string `json:"learning_unit_ids,omitempty"` // optional filter
 }
 
 // AnswerResponse is the result of LLM answering with sources used.
@@ -264,8 +265,18 @@ func (h *AIHandler) AnswerHandler(c *gin.Context) {
 		docIDPtr = &id
 	}
 
+	unitIDs := make([]uuid.UUID, 0, len(req.LearningUnitIDs))
+	for _, idStr := range req.LearningUnitIDs {
+		id, err := uuid.Parse(idStr)
+		if err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid learning_unit_id"})
+			return
+		}
+		unitIDs = append(unitIDs, id)
+	}
+
 	ctx := c.Request.Context()
-	answer, sources, err := h.svc.AnswerQuery(ctx, req.Query, req.Lens, topK, docIDPtr)
+	answer, sources, err := h.svc.AnswerQuery(ctx, req.Query, req.Lens, topK, docIDPtr, unitIDs)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return

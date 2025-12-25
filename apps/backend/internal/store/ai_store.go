@@ -97,6 +97,34 @@ func (s *AIStore) FindSimilarChunksByDocument(ctx context.Context, embedding []f
 	return results, rows.Err()
 }
 
+func (s *AIStore) FindSimilarChunksByLearningUnits(ctx context.Context, embedding []float32, topK int, unitIDs []uuid.UUID) ([]SimilarChunk, error) {
+	rows, err := s.db.Query(ctx,
+		`SELECT id, document_id, learning_unit_id, content
+         FROM document_chunks
+         WHERE embedding IS NOT NULL
+           AND learning_unit_id = ANY($2)
+         ORDER BY embedding <=> $1
+         LIMIT $3`,
+		pgvector.NewVector(embedding),
+		unitIDs,
+		topK,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var results []SimilarChunk
+	for rows.Next() {
+		var r SimilarChunk
+		if err := rows.Scan(&r.ID, &r.DocumentID, &r.LearningUnitID, &r.Content); err != nil {
+			return nil, err
+		}
+		results = append(results, r)
+	}
+	return results, rows.Err()
+}
+
 // GetChunksByLearningUnits returns chunks for the specified learning unit IDs.
 func (s *AIStore) GetChunksByLearningUnits(ctx context.Context, unitIDs []uuid.UUID, limit int) ([]SimilarChunk, error) {
 	rows, err := s.db.Query(ctx,
