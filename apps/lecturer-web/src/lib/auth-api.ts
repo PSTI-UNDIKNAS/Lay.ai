@@ -595,6 +595,164 @@ export async function deleteDocument(documentId: string): Promise<void> {
   }
 }
 
+export interface AIConversation {
+  id: string;
+  user_id: string;
+  title: string;
+  knowledge_base_learning_unit_ids?: string[];
+  knowledge_base_course_ids?: string[];
+  created_at: string;
+  updated_at: string;
+}
+
+export async function listAIConversations(): Promise<AIConversation[]> {
+  const response = await fetch(`${API_BASE_URL}/ai/conversations`, {
+    method: 'GET',
+    headers: {
+      Accept: 'application/json',
+      ...getAuthHeaders(),
+    },
+  });
+
+  const data = await response.json().catch(() => ({}));
+
+  if (!response.ok) {
+    const msg = data?.error || data?.message || 'Failed to fetch AI conversations';
+    throw new Error(msg);
+  }
+
+  if (Array.isArray(data?.conversations)) {
+    return data.conversations as AIConversation[];
+  }
+
+  return [];
+}
+
+export async function createAIConversation(title: string): Promise<AIConversation> {
+  const response = await fetch(`${API_BASE_URL}/ai/conversations`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Accept: 'application/json',
+      ...getAuthHeaders(),
+    },
+    body: JSON.stringify({ title }),
+  });
+
+  const data = await response.json().catch(() => ({}));
+
+  if (!response.ok) {
+    const msg = data?.error || data?.message || 'Failed to create AI conversation';
+    throw new Error(msg);
+  }
+
+  if (data?.conversation) {
+    return data.conversation as AIConversation;
+  }
+
+  throw new Error('Invalid AI conversation response');
+}
+
+export async function updateAIConversationTitle(conversationId: string, title: string): Promise<AIConversation> {
+  return updateAIConversation(conversationId, { title });
+}
+
+export async function updateAIConversation(
+  conversationId: string,
+  updates: {
+    title?: string;
+    knowledge_base_learning_unit_ids?: string[];
+    knowledge_base_course_ids?: string[];
+  },
+): Promise<AIConversation> {
+  const response = await fetch(`${API_BASE_URL}/ai/conversations/${conversationId}`, {
+    method: 'PUT',
+    headers: {
+      'Content-Type': 'application/json',
+      Accept: 'application/json',
+      ...getAuthHeaders(),
+    },
+    body: JSON.stringify(updates),
+  });
+
+  const data = await response.json().catch(() => ({}));
+
+  if (!response.ok) {
+    const msg = data?.error || data?.message || 'Failed to update AI conversation';
+    throw new Error(msg);
+  }
+
+  if (data?.conversation) {
+    return data.conversation as AIConversation;
+  }
+
+  throw new Error('Invalid AI conversation response');
+}
+
+export async function deleteAIConversation(conversationId: string): Promise<void> {
+  const response = await fetch(`${API_BASE_URL}/ai/conversations/${conversationId}`, {
+    method: 'DELETE',
+    headers: {
+      Accept: 'application/json',
+      ...getAuthHeaders(),
+    },
+  });
+
+  const data = await response.json().catch(() => ({}));
+
+  if (!response.ok) {
+    const msg = data?.error || data?.message || 'Failed to delete AI conversation';
+    throw new Error(msg);
+  }
+}
+
+export interface AIAnswerSource {
+  id: string;
+  document_id: string;
+  learning_unit_id?: string;
+  content: string;
+}
+
+export interface AIAnswerResponse {
+  answer: string;
+  sources: AIAnswerSource[];
+}
+
+export async function answerAI(params: {
+  query: string;
+  lens?: string;
+  top_k?: number;
+  document_id?: string;
+  learning_unit_ids?: string[];
+}): Promise<AIAnswerResponse> {
+  const response = await fetch(`${API_BASE_URL}/ai/answer`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Accept: 'application/json',
+      ...getAuthHeaders(),
+    },
+    body: JSON.stringify(params),
+  });
+
+  const data = await response.json().catch(() => ({}));
+
+  if (!response.ok) {
+    const msg = data?.error || data?.message || 'Failed to get AI answer';
+    throw new Error(msg);
+  }
+
+  if (typeof data?.answer === 'string' && Array.isArray(data?.sources)) {
+    return data as AIAnswerResponse;
+  }
+
+  if (typeof data?.answer === 'string') {
+    return { answer: data.answer as string, sources: [] };
+  }
+
+  throw new Error('Invalid AI answer response');
+}
+
 export interface LearningUnitSummary {
   unit_id: string;
   material_count: number;
