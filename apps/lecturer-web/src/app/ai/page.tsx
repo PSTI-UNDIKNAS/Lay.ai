@@ -12,7 +12,7 @@ import {
   Maximize2,
   Send,
   Lightbulb,
-  Plus,
+  RotateCcw,
   ChevronDown,
   X,
   Pencil,
@@ -21,15 +21,26 @@ import {
 import { useRouter, useSearchParams } from 'next/navigation';
 import {
   AIConversation,
+  GeneratedFlashcardSetResponse,
+  GeneratedQuizResponse,
+  QuizDifficulty,
   LecturerCourse,
   LearningUnit,
   LearningUnitSummary,
   answerAI,
   createAIConversation,
   deleteAIConversation,
+  deleteGeneratedFlashcardSet,
+  deleteGeneratedQuiz,
+  generateFlashcards,
+  generateQuiz,
   getCourseLearningUnitSummaries,
   getCourseLearningUnits,
+  getGeneratedFlashcardSet,
+  getGeneratedQuiz,
   getMyCourses,
+  listGeneratedFlashcardSets,
+  listGeneratedQuizzes,
   listAIConversations,
   updateAIConversation,
   updateAIConversationTitle,
@@ -218,7 +229,55 @@ export default function AiChatbotPage() {
   >([]);
   const [suggestions, setSuggestions] = useState<Array<{ id: string; title: string; tag: string }>>([]);
   const [askedSuggestionIds, setAskedSuggestionIds] = useState<string[]>([]);
+  const [suggestRegenerating, setSuggestRegenerating] = useState(false);
+  const [suggestRegenerateError, setSuggestRegenerateError] = useState<string | null>(null);
   const [sending, setSending] = useState(false);
+  const [flashcardsOpen, setFlashcardsOpen] = useState(false);
+  const [flashcardsGenerating, setFlashcardsGenerating] = useState(false);
+  const [flashcardsError, setFlashcardsError] = useState<string | null>(null);
+  const [flashcardSet, setFlashcardSet] = useState<GeneratedFlashcardSetResponse | null>(null);
+  const [revealedFlashcardIndexes, setRevealedFlashcardIndexes] = useState<number[]>([]);
+  const [flashcardsGenerateOpen, setFlashcardsGenerateOpen] = useState(false);
+  const [flashcardsQuantity, setFlashcardsQuantity] = useState(10);
+  const [flashcardsContext, setFlashcardsContext] = useState('');
+  const [flashcardsGenerateSubmitting, setFlashcardsGenerateSubmitting] = useState(false);
+
+  const [quizGenerateOpen, setQuizGenerateOpen] = useState(false);
+  const [quizQuantity, setQuizQuantity] = useState(5);
+  const [quizContext, setQuizContext] = useState('');
+  const [quizDifficulty, setQuizDifficulty] = useState<QuizDifficulty>('medium');
+  const [quizGenerateSubmitting, setQuizGenerateSubmitting] = useState(false);
+  const [quizOpen, setQuizOpen] = useState(false);
+  const [quizLoading, setQuizLoading] = useState(false);
+  const [quizError, setQuizError] = useState<string | null>(null);
+  const [quiz, setQuiz] = useState<GeneratedQuizResponse | null>(null);
+  const [quizStepIndex, setQuizStepIndex] = useState(0);
+  const [quizSelectedOptionByIndex, setQuizSelectedOptionByIndex] = useState<Record<number, number>>({});
+  const [quizFinished, setQuizFinished] = useState(false);
+
+  type GeneratedListItem = {
+    kind: 'flashcards' | 'quiz';
+    id: string;
+    title: string;
+    count: number;
+    createdAt: string;
+  };
+  const [generatedItems, setGeneratedItems] = useState<GeneratedListItem[]>([]);
+  const [generatedLoading, setGeneratedLoading] = useState(false);
+  const [generatedError, setGeneratedError] = useState<string | null>(null);
+
+  const quizScore = useMemo(() => {
+    if (!quiz) return 0;
+    let score = 0;
+    for (let i = 0; i < quiz.questions.length; i += 1) {
+      const selectedOptIdx = quizSelectedOptionByIndex[i];
+      if (typeof selectedOptIdx !== 'number') continue;
+      const q = quiz.questions[i];
+      if (!q || !Array.isArray(q.options)) continue;
+      if (q.options[selectedOptIdx] === q.answer) score += 1;
+    }
+    return score;
+  }, [quiz, quizSelectedOptionByIndex]);
 
   const messagesEndRef = useRef<HTMLDivElement | null>(null);
 
@@ -348,6 +407,11 @@ export default function AiChatbotPage() {
     setSuggestions([]);
     setAskedSuggestionIds([]);
     setSending(false);
+    setFlashcardsOpen(false);
+    setFlashcardsGenerating(false);
+    setFlashcardsError(null);
+    setFlashcardSet(null);
+    setRevealedFlashcardIndexes([]);
     setChatInput('');
     setKbOpen(false);
     setSuggestOpen(false);
@@ -563,6 +627,64 @@ export default function AiChatbotPage() {
 
   const availableUnits = kbSelectedCourseIds.flatMap((id) => kbUnitsByCourse[id] ?? []);
 
+  const unitCourseIdById = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const units of Object.values(kbUnitsByCourse)) {
+      for (const u of units) {
+        if (!map.has(u.id)) map.set(u.id, u.course_id);
+      }
+    }
+    return map;
+  }, [kbUnitsByCourse]);
+
+  async function refreshGenerated() {
+    if (!kbApplied || kbAppliedCourseIds.length !== 1) {
+      setGeneratedItems([]);
+      return;
+    }
+
+    const courseId = kbAppliedCourseIds[0];
+    setGeneratedLoading(true);
+    setGeneratedError(null);
+    try {
+      const [flashcards, quizzes] = await Promise.all([
+        listGeneratedFlashcardSets(courseId),
+        listGeneratedQuizzes(courseId),
+      ]);
+
+      const merged: GeneratedListItem[] = [
+        ...flashcards.map((s) => ({
+          kind: 'flashcards' as const,
+          id: s.id,
+          title: s.title,
+          count: s.flashcards_count,
+          createdAt: s.created_at,
+        })),
+        ...quizzes.map((q) => ({
+          kind: 'quiz' as const,
+          id: q.id,
+          title: q.title,
+          count: q.questions_count,
+          createdAt: q.created_at,
+        })),
+      ].sort((a, b) => {
+        const at = new Date(a.createdAt).getTime();
+        const bt = new Date(b.createdAt).getTime();
+        return (Number.isNaN(bt) ? 0 : bt) - (Number.isNaN(at) ? 0 : at);
+      });
+
+      setGeneratedItems(merged);
+    } catch (err) {
+      setGeneratedError(err instanceof Error ? err.message : 'Failed to load generated content');
+    } finally {
+      setGeneratedLoading(false);
+    }
+  }
+
+  useEffect(() => {
+    void refreshGenerated();
+  }, [kbApplied, kbAppliedCourseIds.join(',')]);
+
   const filteredUnits = availableUnits.filter((u) =>
     u.title.toLowerCase().includes(unitQuery.toLowerCase()),
   );
@@ -676,6 +798,46 @@ export default function AiChatbotPage() {
     return lines.slice(0, 10);
   }
 
+  async function requestSuggestedQuestions(learningUnitIds: string[]) {
+    const suggestionResp = await answerAI({
+      query:
+        'Generate 10 suggested questions a lecturer can ask based on the selected knowledge base.\n' +
+        'Return ONLY a valid JSON array of strings.\n' +
+        'No markdown. No explanation. No numbering. No extra keys.',
+      top_k: 12,
+      lens,
+      learning_unit_ids: learningUnitIds,
+    });
+    const titles = parseSuggestions(suggestionResp.answer);
+    return titles.slice(0, 10).map((t, idx) => ({
+      id: `s-${idx}-${Date.now()}`,
+      title: t,
+      tag: 'suggestion',
+    }));
+  }
+
+  async function regenerateSuggestions() {
+    if (!kbApplied || kbApplying || suggestRegenerating) return;
+    if (kbAppliedUnitIds.length === 0) {
+      setSuggestRegenerateError('Apply a knowledge base to generate suggestions.');
+      return;
+    }
+
+    setSuggestRegenerateError(null);
+    setSuggestRegenerating(true);
+    try {
+      const next = await requestSuggestedQuestions(kbAppliedUnitIds);
+      setSuggestions(next);
+      setAskedSuggestionIds([]);
+    } catch (err) {
+      setSuggestRegenerateError(
+        err instanceof Error ? err.message : 'Failed to regenerate suggestions.',
+      );
+    } finally {
+      setSuggestRegenerating(false);
+    }
+  }
+
   async function applyKnowledgeBase() {
     if (kbApplying) return;
     setKbError(null);
@@ -774,23 +936,7 @@ export default function AiChatbotPage() {
       }
 
       setSuggestions([]);
-      const suggestionResp = await answerAI({
-        query:
-          'Generate 10 suggested questions a lecturer can ask based on the selected knowledge base.\n' +
-          'Return ONLY a valid JSON array of strings.\n' +
-          'No markdown. No explanation. No numbering. No extra keys.',
-        top_k: 12,
-        lens,
-        learning_unit_ids: nextUnitIds,
-      });
-      const titles = parseSuggestions(suggestionResp.answer);
-      setSuggestions(
-        titles.slice(0, 10).map((t, idx) => ({
-          id: `s-${idx}-${Date.now()}`,
-          title: t,
-          tag: 'suggestion',
-        })),
-      );
+      setSuggestions(await requestSuggestedQuestions(nextUnitIds));
       setAskedSuggestionIds([]);
 
       setKbChangeNotice(kbChanged ? 'Knowledge base updated' : 'Knowledge base applied');
@@ -804,6 +950,175 @@ export default function AiChatbotPage() {
       setKbOpen(true);
     } finally {
       setKbApplying(false);
+    }
+  }
+
+  async function handleGenerateFlashcards() {
+    if (!kbApplied || kbApplying) return;
+
+    setFlashcardsError(null);
+    setFlashcardsQuantity(10);
+    setFlashcardsContext('');
+    setFlashcardsGenerateOpen(true);
+  }
+
+  async function submitGenerateFlashcards() {
+    if (!kbApplied || kbApplying || flashcardsGenerateSubmitting) return;
+
+    setFlashcardsError(null);
+    setFlashcardsGenerating(false);
+
+    if (kbAppliedCourseIds.length !== 1) {
+      setFlashcardsError('Select exactly 1 course in the knowledge base to generate flashcards.');
+      return;
+    }
+
+    const courseId = kbAppliedCourseIds[0];
+    const unitIds = kbAppliedUnitIds.filter((id) => unitCourseIdById.get(id) === courseId);
+
+    setFlashcardsGenerateSubmitting(true);
+    try {
+      const resp = await generateFlashcards(courseId, {
+        learning_unit_ids: unitIds,
+        quantity: flashcardsQuantity,
+        context: flashcardsContext,
+      });
+      setFlashcardsGenerateOpen(false);
+      setFlashcardsOpen(true);
+      setFlashcardSet(resp);
+      setRevealedFlashcardIndexes([]);
+      void refreshGenerated();
+    } catch (err) {
+      setFlashcardsError(err instanceof Error ? err.message : 'Failed to generate flashcards');
+    } finally {
+      setFlashcardsGenerateSubmitting(false);
+    }
+  }
+
+  async function openGeneratedFlashcardSet(setId: string) {
+    setFlashcardsOpen(true);
+    setFlashcardsError(null);
+    setFlashcardSet(null);
+    setRevealedFlashcardIndexes([]);
+
+    if (kbAppliedCourseIds.length !== 1) {
+      setFlashcardsError('Select exactly 1 course in the knowledge base to view flashcards.');
+      return;
+    }
+
+    const courseId = kbAppliedCourseIds[0];
+    setFlashcardsGenerating(true);
+    try {
+      const resp = await getGeneratedFlashcardSet(courseId, setId);
+      setFlashcardSet(resp);
+    } catch (err) {
+      setFlashcardsError(err instanceof Error ? err.message : 'Failed to load flashcards');
+    } finally {
+      setFlashcardsGenerating(false);
+    }
+  }
+
+  async function handleDeleteGeneratedFlashcardSet(setId: string) {
+    if (kbAppliedCourseIds.length !== 1) return;
+    if (!window.confirm('Delete this generated flashcard set?')) return;
+
+    const courseId = kbAppliedCourseIds[0];
+    setFlashcardsGenerating(true);
+    try {
+      await deleteGeneratedFlashcardSet(courseId, setId);
+      setFlashcardsOpen(false);
+      setFlashcardSet(null);
+      void refreshGenerated();
+    } catch (err) {
+      setFlashcardsError(err instanceof Error ? err.message : 'Failed to delete flashcards');
+    } finally {
+      setFlashcardsGenerating(false);
+    }
+  }
+
+  function handleGenerateQuiz() {
+    if (!kbApplied || kbApplying) return;
+    setQuizError(null);
+    setQuizQuantity(5);
+    setQuizContext('');
+    setQuizDifficulty('medium');
+    setQuizGenerateOpen(true);
+  }
+
+  async function submitGenerateQuiz() {
+    if (!kbApplied || kbApplying || quizGenerateSubmitting) return;
+
+    setQuizError(null);
+    if (kbAppliedCourseIds.length !== 1) {
+      setQuizError('Select exactly 1 course in the knowledge base to generate a quiz.');
+      return;
+    }
+
+    const courseId = kbAppliedCourseIds[0];
+    const unitIds = kbAppliedUnitIds.filter((id) => unitCourseIdById.get(id) === courseId);
+
+    setQuizGenerateSubmitting(true);
+    try {
+      const resp = await generateQuiz(courseId, {
+        learning_unit_ids: unitIds,
+        quantity: quizQuantity,
+        context: quizContext,
+        difficulty: quizDifficulty,
+      });
+      setQuizGenerateOpen(false);
+      setQuizOpen(true);
+      setQuiz(resp);
+      setQuizStepIndex(0);
+      setQuizSelectedOptionByIndex({});
+      setQuizFinished(false);
+      void refreshGenerated();
+    } catch (err) {
+      setQuizError(err instanceof Error ? err.message : 'Failed to generate quiz');
+    } finally {
+      setQuizGenerateSubmitting(false);
+    }
+  }
+
+  async function openGeneratedQuiz(quizId: string) {
+    setQuizOpen(true);
+    setQuizError(null);
+    setQuiz(null);
+    setQuizStepIndex(0);
+    setQuizSelectedOptionByIndex({});
+    setQuizFinished(false);
+
+    if (kbAppliedCourseIds.length !== 1) {
+      setQuizError('Select exactly 1 course in the knowledge base to view a quiz.');
+      return;
+    }
+
+    const courseId = kbAppliedCourseIds[0];
+    setQuizLoading(true);
+    try {
+      const resp = await getGeneratedQuiz(courseId, quizId);
+      setQuiz(resp);
+    } catch (err) {
+      setQuizError(err instanceof Error ? err.message : 'Failed to load quiz');
+    } finally {
+      setQuizLoading(false);
+    }
+  }
+
+  async function handleDeleteGeneratedQuiz(quizId: string) {
+    if (kbAppliedCourseIds.length !== 1) return;
+    if (!window.confirm('Delete this generated quiz?')) return;
+
+    const courseId = kbAppliedCourseIds[0];
+    setQuizLoading(true);
+    try {
+      await deleteGeneratedQuiz(courseId, quizId);
+      setQuizOpen(false);
+      setQuiz(null);
+      void refreshGenerated();
+    } catch (err) {
+      setQuizError(err instanceof Error ? err.message : 'Failed to delete quiz');
+    } finally {
+      setQuizLoading(false);
     }
   }
 
@@ -1112,17 +1427,30 @@ export default function AiChatbotPage() {
                         disabled={!kbApplied || kbApplying || sending}
                       />
                       <div className="flex items-center justify-between">
-                        <Button
-                          type="button"
-                          variant="outline"
-                          size="sm"
-                          className="gap-2 border-blue-200 text-blue-700 hover:bg-blue-50"
-                          onClick={() => setSuggestOpen(true)}
-                          disabled={!kbApplied || kbApplying}
-                        >
-                          <Lightbulb className="h-4 w-4" />
-                          Suggestions
-                        </Button>
+                        <div className="flex items-center gap-2">
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            className="gap-2 border-blue-200 text-blue-700 hover:bg-blue-50"
+                            onClick={() => setSuggestOpen(true)}
+                            disabled={!kbApplied || kbApplying}
+                          >
+                            <Lightbulb className="h-4 w-4" />
+                            Suggestions
+                          </Button>
+                          <select
+                            className="h-9 rounded-md border border-zinc-200 bg-white px-3 text-sm text-zinc-900 shadow-sm outline-none ring-zinc-900/5 focus-visible:ring-2"
+                            value={lens}
+                            onChange={(e) => setLens(e.target.value as Lens)}
+                            disabled={!kbApplied || kbApplying || sending}
+                          >
+                            <option value="default">Default</option>
+                            <option value="academic">Academic</option>
+                            <option value="feynman">Feynman</option>
+                            <option value="practitioner">Practitioner</option>
+                          </select>
+                        </div>
                         <Button
                           type="button"
                           variant="outline"
@@ -1139,14 +1467,14 @@ export default function AiChatbotPage() {
                 </Card>
               </div>
 
-              <div className="flex h-full flex-col space-y-4 overflow-hidden">
+              <div className="flex h-full min-h-0 flex-col space-y-4 overflow-hidden">
                 <Card
                   title="Studio"
                   headerRight={<Maximize2 className="h-4 w-4 text-zinc-600" />}
                   className="flex-1"
                   bodyClassName="h-full"
                 >
-                  <div className="space-y-4">
+                  <div className="flex h-full flex-col space-y-4 overflow-y-auto">
                     <div>
                       <h3 className="text-sm font-semibold text-zinc-900">
                         Knowledge Base
@@ -1181,42 +1509,109 @@ export default function AiChatbotPage() {
                         )}
                       </div>
                     </div>
-                    <div>
-                      <h3 className="text-sm font-semibold text-zinc-900">
-                        Lens
-                      </h3>
-                      <div className="mt-3 space-y-2">
-                        <select
-                          className="w-full rounded-md border border-zinc-200 bg-white px-3 py-2 text-sm text-zinc-900 shadow-sm outline-none ring-zinc-900/5 focus-visible:ring-2"
-                          value={lens}
-                          onChange={(e) => setLens(e.target.value as Lens)}
-                          disabled={sending || kbApplying}
-                        >
-                          <option value="default">Default</option>
-                          <option value="academic">Academic</option>
-                          <option value="feynman">Feynman</option>
-                          <option value="practitioner">Practitioner</option>
-                        </select>
-                      </div>
-                    </div>
                     <div className="rounded-xl border border-zinc-200 bg-white p-4">
                       <h3 className="mb-3 text-sm font-semibold text-zinc-900">
                         Generate Knowledge
                       </h3>
                       <div className="space-y-3">
-                        <Button variant="outline" className="w-full" disabled>
-                          Generate Flashcards
+                        <Button
+                          variant="outline"
+                          className="w-full"
+                          onClick={() => void handleGenerateFlashcards()}
+                          disabled={!kbApplied || kbApplying || flashcardsGenerateSubmitting}
+                        >
+                          {flashcardsGenerateSubmitting ? 'Generating Flashcards...' : 'Generate Flashcards'}
                         </Button>
-                        <Button variant="outline" className="w-full" disabled>
+                        <Button
+                          variant="outline"
+                          className="w-full"
+                          onClick={handleGenerateQuiz}
+                          disabled={!kbApplied || kbApplying || quizGenerateSubmitting}
+                        >
                           Generate Quiz
                         </Button>
                       </div>
                     </div>
                     <div className="rounded-xl border border-zinc-200 bg-white p-4">
-                      <Button variant="outline" className="w-full gap-2">
-                        <Plus className="h-4 w-4" />
-                        Add to Note
-                      </Button>
+                      <div className="flex items-center justify-between gap-3">
+                        <div className="text-sm font-semibold text-zinc-900">Generated</div>
+                        <Button
+                          variant="outline"
+                          className="h-8 px-3"
+                          onClick={() => void refreshGenerated()}
+                          disabled={!kbApplied || kbApplying || generatedLoading}
+                        >
+                          {generatedLoading ? 'Loading...' : 'Refresh'}
+                        </Button>
+                      </div>
+
+                      {generatedError && (
+                        <div className="mt-3 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+                          {generatedError}
+                        </div>
+                      )}
+
+                      <div className="mt-3 max-h-72 space-y-2 overflow-y-auto pr-1">
+                        {!kbApplied ? (
+                          <div className="rounded-lg border border-zinc-200 bg-white p-3 text-sm text-zinc-600">
+                            Apply a knowledge base to see generated content.
+                          </div>
+                        ) : generatedLoading ? (
+                          <div className="rounded-lg border border-zinc-200 bg-white p-3 text-sm text-zinc-600">
+                            Loading generated content...
+                          </div>
+                        ) : generatedItems.length === 0 ? (
+                          <div className="rounded-lg border border-zinc-200 bg-white p-3 text-sm text-zinc-600">
+                            No generated content yet.
+                          </div>
+                        ) : (
+                          generatedItems.map((item) => {
+                            const label =
+                              item.kind === 'flashcards' ? 'Generated Flashcards' : 'Generated Quiz';
+                            const countLabel =
+                              item.kind === 'flashcards'
+                                ? `${item.count} flashcard${item.count === 1 ? '' : 's'}`
+                                : `${item.count} question${item.count === 1 ? '' : 's'}`;
+
+                            return (
+                              <button
+                                key={`${item.kind}-${item.id}`}
+                                type="button"
+                                className="flex w-full items-start justify-between gap-3 rounded-lg border border-zinc-200 bg-white p-3 text-left hover:bg-zinc-50"
+                                onClick={() =>
+                                  item.kind === 'flashcards'
+                                    ? void openGeneratedFlashcardSet(item.id)
+                                    : void openGeneratedQuiz(item.id)
+                                }
+                              >
+                                <div className="min-w-0">
+                                  <div className="text-xs text-zinc-600">{label}</div>
+                                  <div className="mt-1 truncate text-sm font-semibold text-zinc-900">
+                                    {item.title}
+                                  </div>
+                                  <div className="mt-1 text-xs text-zinc-600">{countLabel}</div>
+                                </div>
+                                <button
+                                  type="button"
+                                  className="rounded-md p-2 text-zinc-600 hover:bg-zinc-100"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    if (item.kind === 'flashcards') {
+                                      void handleDeleteGeneratedFlashcardSet(item.id);
+                                    } else {
+                                      void handleDeleteGeneratedQuiz(item.id);
+                                    }
+                                  }}
+                                  disabled={flashcardsGenerating || quizLoading}
+                                  aria-label="Delete generated item"
+                                >
+                                  <Trash2 className="h-4 w-4" />
+                                </button>
+                              </button>
+                            );
+                          })
+                        )}
+                      </div>
                     </div>
                   </div>
                 </Card>
@@ -1454,6 +1849,501 @@ export default function AiChatbotPage() {
           </div>
         )}
 
+        {flashcardsGenerateOpen && (
+          <div className="fixed inset-0 z-50">
+            <div
+              className="absolute inset-0 bg-black/50"
+              onClick={() => {
+                if (!flashcardsGenerateSubmitting) setFlashcardsGenerateOpen(false);
+              }}
+            />
+            <div className="absolute left-1/2 top-24 w-full max-w-2xl -translate-x-1/2 overflow-hidden rounded-xl bg-white shadow-xl">
+              <div className="flex items-center justify-between border-b border-zinc-200 px-6 py-4">
+                <div className="text-base font-semibold text-zinc-900">Generate Flashcards</div>
+                <button
+                  className="rounded-md p-2 text-zinc-600 hover:bg-zinc-100"
+                  onClick={() => {
+                    if (!flashcardsGenerateSubmitting) setFlashcardsGenerateOpen(false);
+                  }}
+                >
+                  <X className="h-4 w-4" />
+                </button>
+              </div>
+              <div className="space-y-4 px-6 py-4">
+                {flashcardsError && (
+                  <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+                    {flashcardsError}
+                  </div>
+                )}
+                <div className="space-y-2">
+                  <div className="text-sm font-semibold text-zinc-900">Quantity</div>
+                  <Input
+                    type="number"
+                    min={1}
+                    max={20}
+                    value={String(flashcardsQuantity)}
+                    onChange={(e) => {
+                      const next = Number(e.target.value);
+                      setFlashcardsQuantity(Number.isFinite(next) ? next : 1);
+                    }}
+                    disabled={flashcardsGenerateSubmitting}
+                  />
+                  <div className="text-xs text-zinc-600">Max 20</div>
+                </div>
+                <div className="space-y-2">
+                  <div className="text-sm font-semibold text-zinc-900">Context (optional)</div>
+                  <textarea
+                    className="w-full rounded-md border border-zinc-200 bg-white px-3 py-2 text-sm text-zinc-900 shadow-sm outline-none ring-zinc-900/5 focus-visible:ring-2"
+                    rows={4}
+                    value={flashcardsContext}
+                    onChange={(e) => setFlashcardsContext(e.target.value)}
+                    disabled={flashcardsGenerateSubmitting}
+                    placeholder="What should the flashcards focus on?"
+                  />
+                </div>
+              </div>
+              <div className="flex items-center justify-end gap-2 border-t border-zinc-200 px-6 py-4">
+                <Button
+                  variant="outline"
+                  onClick={() => setFlashcardsGenerateOpen(false)}
+                  disabled={flashcardsGenerateSubmitting}
+                >
+                  Cancel
+                </Button>
+                <Button onClick={() => void submitGenerateFlashcards()} disabled={flashcardsGenerateSubmitting}>
+                  {flashcardsGenerateSubmitting ? 'Generating...' : 'Generate'}
+                </Button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {quizGenerateOpen && (
+          <div className="fixed inset-0 z-50">
+            <div
+              className="absolute inset-0 bg-black/50"
+              onClick={() => {
+                if (!quizGenerateSubmitting) setQuizGenerateOpen(false);
+              }}
+            />
+            <div className="absolute left-1/2 top-24 w-full max-w-2xl -translate-x-1/2 overflow-hidden rounded-xl bg-white shadow-xl">
+              <div className="flex items-center justify-between border-b border-zinc-200 px-6 py-4">
+                <div className="text-base font-semibold text-zinc-900">Generate Quiz</div>
+                <button
+                  className="rounded-md p-2 text-zinc-600 hover:bg-zinc-100"
+                  onClick={() => {
+                    if (!quizGenerateSubmitting) setQuizGenerateOpen(false);
+                  }}
+                >
+                  <X className="h-4 w-4" />
+                </button>
+              </div>
+              <div className="space-y-4 px-6 py-4">
+                {quizError && (
+                  <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+                    {quizError}
+                  </div>
+                )}
+                <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                  <div className="space-y-2">
+                    <div className="text-sm font-semibold text-zinc-900">Quantity</div>
+                    <Input
+                      type="number"
+                      min={1}
+                      max={20}
+                      value={String(quizQuantity)}
+                      onChange={(e) => {
+                        const next = Number(e.target.value);
+                        setQuizQuantity(Number.isFinite(next) ? next : 1);
+                      }}
+                      disabled={quizGenerateSubmitting}
+                    />
+                    <div className="text-xs text-zinc-600">Max 20</div>
+                  </div>
+                  <div className="space-y-2">
+                    <div className="text-sm font-semibold text-zinc-900">Difficulty</div>
+                    <select
+                      className="w-full rounded-md border border-zinc-200 bg-white px-3 py-2 text-sm text-zinc-900 shadow-sm outline-none ring-zinc-900/5 focus-visible:ring-2"
+                      value={quizDifficulty}
+                      onChange={(e) => setQuizDifficulty(e.target.value as QuizDifficulty)}
+                      disabled={quizGenerateSubmitting}
+                    >
+                      <option value="easy">Easy</option>
+                      <option value="medium">Medium</option>
+                      <option value="hard">Hard</option>
+                    </select>
+                  </div>
+                </div>
+                <div className="space-y-2">
+                  <div className="text-sm font-semibold text-zinc-900">Context (optional)</div>
+                  <textarea
+                    className="w-full rounded-md border border-zinc-200 bg-white px-3 py-2 text-sm text-zinc-900 shadow-sm outline-none ring-zinc-900/5 focus-visible:ring-2"
+                    rows={4}
+                    value={quizContext}
+                    onChange={(e) => setQuizContext(e.target.value)}
+                    disabled={quizGenerateSubmitting}
+                    placeholder="What should the quiz focus on?"
+                  />
+                </div>
+              </div>
+              <div className="flex items-center justify-end gap-2 border-t border-zinc-200 px-6 py-4">
+                <Button
+                  variant="outline"
+                  onClick={() => setQuizGenerateOpen(false)}
+                  disabled={quizGenerateSubmitting}
+                >
+                  Cancel
+                </Button>
+                <Button onClick={() => void submitGenerateQuiz()} disabled={quizGenerateSubmitting}>
+                  {quizGenerateSubmitting ? 'Generating...' : 'Generate'}
+                </Button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {flashcardsOpen && (
+          <div className="fixed inset-0 z-50">
+            <div
+              className="absolute inset-0 bg-black/50"
+              onClick={() => setFlashcardsOpen(false)}
+            />
+            <div className="absolute left-1/2 top-24 w-full max-w-3xl -translate-x-1/2 overflow-hidden rounded-xl bg-white shadow-xl">
+              <div className="flex items-center justify-between border-b border-zinc-200 px-6 py-4">
+                <div className="text-base font-semibold text-zinc-900">Generated Flashcards</div>
+                <button
+                  className="rounded-md p-2 text-zinc-600 hover:bg-zinc-100"
+                  onClick={() => setFlashcardsOpen(false)}
+                >
+                  <X className="h-4 w-4" />
+                </button>
+              </div>
+              <div className="max-h-[28rem] space-y-4 overflow-y-auto px-6 py-4">
+                {flashcardsError && (
+                  <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+                    {flashcardsError}
+                  </div>
+                )}
+
+                {flashcardsGenerating && (
+                  <div className="rounded-lg border border-zinc-200 bg-white p-4">
+                    <div className="flex items-center gap-3">
+                      <div className="h-5 w-5 animate-spin rounded-full border-2 border-zinc-300 border-t-zinc-900" />
+                      <div className="text-sm font-semibold text-zinc-900">
+                        Loading flashcards...
+                      </div>
+                    </div>
+                    <div className="mt-2 text-sm text-zinc-600">
+                      Fetching the saved content for this course.
+                    </div>
+                  </div>
+                )}
+
+                {!flashcardsGenerating && !flashcardsError && !flashcardSet && (
+                  <div className="rounded-lg border border-zinc-200 bg-white p-4 text-sm text-zinc-600">
+                    No flashcards loaded.
+                  </div>
+                )}
+
+                {flashcardSet && (
+                  <div className="space-y-4">
+                    <div className="space-y-1">
+                      <div className="text-lg font-semibold text-zinc-900">
+                        {flashcardSet.title}
+                      </div>
+                      <div className="text-sm text-zinc-600">
+                        {flashcardSet.flashcards.length} flashcard
+                        {flashcardSet.flashcards.length === 1 ? '' : 's'} •{' '}
+                        {flashcardSet.source_unit_ids.length} source unit
+                        {flashcardSet.source_unit_ids.length === 1 ? '' : 's'}
+                      </div>
+                    </div>
+
+                    <div className="space-y-3">
+                      {flashcardSet.flashcards.map((c, idx) => {
+                        const revealed = revealedFlashcardIndexes.includes(idx);
+                        return (
+                          <div
+                            key={`fc-${idx}`}
+                            className="rounded-lg border border-zinc-200 bg-white p-4"
+                          >
+                            <div className="flex items-start justify-between gap-3">
+                              <div className="flex min-w-0 items-start gap-3">
+                                <span className="mt-0.5 flex h-6 w-6 flex-none items-center justify-center rounded-full bg-zinc-900 text-xs font-semibold text-white">
+                                  {idx + 1}
+                                </span>
+                                <div className="min-w-0">
+                                  <div className="text-sm font-semibold text-zinc-900">
+                                    {c.front}
+                                  </div>
+                                  {revealed && (
+                                    <div className="mt-2 whitespace-pre-wrap text-sm text-zinc-700">
+                                      {c.back}
+                                    </div>
+                                  )}
+                                </div>
+                              </div>
+                              <Button
+                                variant="outline"
+                                className="h-8 px-3"
+                                onClick={() =>
+                                  setRevealedFlashcardIndexes((prev) =>
+                                    prev.includes(idx)
+                                      ? prev.filter((x) => x !== idx)
+                                      : [...prev, idx],
+                                  )
+                                }
+                              >
+                                {revealed ? 'Hide' : 'Show'}
+                              </Button>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+              </div>
+              <div className="flex items-center justify-between gap-2 border-t border-zinc-200 px-6 py-4">
+                {flashcardSet ? (
+                  <Button
+                    variant="outline"
+                    className="border-red-200 text-red-700 hover:bg-red-50 hover:text-red-700"
+                    onClick={() => void handleDeleteGeneratedFlashcardSet(flashcardSet.id)}
+                    disabled={flashcardsGenerating}
+                  >
+                    Delete
+                  </Button>
+                ) : (
+                  <div />
+                )}
+                <Button variant="outline" onClick={() => setFlashcardsOpen(false)}>
+                  Close
+                </Button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {quizOpen && (
+          <div className="fixed inset-0 z-50">
+            <div
+              className="absolute inset-0 bg-black/50"
+              onClick={() => setQuizOpen(false)}
+            />
+            <div className="absolute left-1/2 top-24 w-full max-w-3xl -translate-x-1/2 overflow-hidden rounded-xl bg-white shadow-xl">
+              <div className="flex items-center justify-between border-b border-zinc-200 px-6 py-4">
+                <div className="text-base font-semibold text-zinc-900">Generated Quiz</div>
+                <button
+                  className="rounded-md p-2 text-zinc-600 hover:bg-zinc-100"
+                  onClick={() => setQuizOpen(false)}
+                >
+                  <X className="h-4 w-4" />
+                </button>
+              </div>
+              <div className="max-h-[28rem] space-y-4 overflow-y-auto px-6 py-4">
+                {quizError && (
+                  <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+                    {quizError}
+                  </div>
+                )}
+
+                {quizLoading && (
+                  <div className="rounded-lg border border-zinc-200 bg-white p-4">
+                    <div className="flex items-center gap-3">
+                      <div className="h-5 w-5 animate-spin rounded-full border-2 border-zinc-300 border-t-zinc-900" />
+                      <div className="text-sm font-semibold text-zinc-900">Loading quiz...</div>
+                    </div>
+                    <div className="mt-2 text-sm text-zinc-600">
+                      Fetching the saved content for this course.
+                    </div>
+                  </div>
+                )}
+
+                {!quizLoading && !quizError && !quiz && (
+                  <div className="rounded-lg border border-zinc-200 bg-white p-4 text-sm text-zinc-600">
+                    No quiz loaded.
+                  </div>
+                )}
+
+                {quiz && (
+                  <div className="space-y-4">
+                    <div className="space-y-1">
+                      <div className="text-lg font-semibold text-zinc-900">{quiz.title}</div>
+                      <div className="text-sm text-zinc-600">
+                        {quiz.questions.length} question{quiz.questions.length === 1 ? '' : 's'} •{' '}
+                        {quiz.source_unit_ids.length} source unit{quiz.source_unit_ids.length === 1 ? '' : 's'}
+                      </div>
+                    </div>
+
+                    {!quizFinished ? (
+                      <div className="space-y-4">
+                        <div className="text-sm text-zinc-600">
+                          Question {Math.min(quizStepIndex + 1, quiz.questions.length)} of {quiz.questions.length}
+                        </div>
+
+                        {quiz.questions[quizStepIndex] ? (
+                          <div className="rounded-lg border border-zinc-200 bg-white p-4">
+                            <div className="text-sm font-semibold text-zinc-900">
+                              {quiz.questions[quizStepIndex].question}
+                            </div>
+                            <div className="mt-3 space-y-2">
+                              {quiz.questions[quizStepIndex].options.map((opt, optIdx) => {
+                                const selected = quizSelectedOptionByIndex[quizStepIndex] === optIdx;
+                                return (
+                                  <button
+                                    key={`quiz-${quiz.id}-q-${quizStepIndex}-opt-${optIdx}`}
+                                    type="button"
+                                    className={`flex w-full items-start gap-3 rounded-md border px-3 py-2 text-left text-sm hover:bg-zinc-50 ${
+                                      selected
+                                        ? 'border-zinc-900 bg-zinc-50 text-zinc-900'
+                                        : 'border-zinc-200 bg-white text-zinc-800'
+                                    }`}
+                                    onClick={() =>
+                                      setQuizSelectedOptionByIndex((prev) => ({
+                                        ...prev,
+                                        [quizStepIndex]: optIdx,
+                                      }))
+                                    }
+                                  >
+                                    <span className="mt-0.5 inline-flex h-5 w-5 flex-none items-center justify-center rounded bg-zinc-900 text-xs font-semibold text-white">
+                                      {String.fromCharCode(65 + optIdx)}
+                                    </span>
+                                    <span className="min-w-0">{opt}</span>
+                                  </button>
+                                );
+                              })}
+                            </div>
+                          </div>
+                        ) : (
+                          <div className="rounded-lg border border-zinc-200 bg-white p-4 text-sm text-zinc-600">
+                            Question not available.
+                          </div>
+                        )}
+
+                        <div className="flex items-center justify-between gap-2">
+                          <Button
+                            variant="outline"
+                            onClick={() => setQuizStepIndex((prev) => Math.max(0, prev - 1))}
+                            disabled={quizStepIndex <= 0}
+                          >
+                            Previous
+                          </Button>
+                          <Button
+                            onClick={() => {
+                              const isLast = quizStepIndex >= quiz.questions.length - 1;
+                              if (isLast) {
+                                setQuizFinished(true);
+                                return;
+                              }
+                              setQuizStepIndex((prev) => prev + 1);
+                            }}
+                            disabled={typeof quizSelectedOptionByIndex[quizStepIndex] !== 'number'}
+                          >
+                            {quizStepIndex >= quiz.questions.length - 1 ? 'Finish' : 'Next'}
+                          </Button>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="space-y-4">
+                        <div className="rounded-lg border border-zinc-200 bg-white p-4">
+                          <div className="text-sm font-semibold text-zinc-900">Score</div>
+                          <div className="mt-1 text-2xl font-semibold text-zinc-900">
+                            {quizScore} / {quiz.questions.length}
+                          </div>
+                          <div className="mt-2 text-sm text-zinc-600">
+                            This score is not saved.
+                          </div>
+                          <div className="mt-4 flex items-center gap-2">
+                            <Button
+                              variant="outline"
+                              onClick={() => {
+                                setQuizStepIndex(0);
+                                setQuizSelectedOptionByIndex({});
+                                setQuizFinished(false);
+                              }}
+                            >
+                              Retake
+                            </Button>
+                            <Button
+                              onClick={() => {
+                                setQuizFinished(false);
+                                setQuizStepIndex(0);
+                              }}
+                            >
+                              Review From Start
+                            </Button>
+                          </div>
+                        </div>
+
+                        <div className="space-y-3">
+                          {quiz.questions.map((q, idx) => {
+                            const selectedOptIdx = quizSelectedOptionByIndex[idx];
+                            const yourAnswer =
+                              typeof selectedOptIdx === 'number' ? q.options[selectedOptIdx] : null;
+                            const correct = yourAnswer != null && yourAnswer === q.answer;
+
+                            return (
+                              <div
+                                key={`quiz-${quiz.id}-review-${idx}`}
+                                className="rounded-lg border border-zinc-200 bg-white p-4"
+                              >
+                                <div className="text-sm font-semibold text-zinc-900">
+                                  {idx + 1}. {q.question}
+                                </div>
+                                <div className="mt-2 space-y-1 text-sm text-zinc-700">
+                                  <div>
+                                    <span className="font-semibold text-zinc-900">Your answer:</span>{' '}
+                                    {yourAnswer ?? '—'}
+                                  </div>
+                                  <div>
+                                    <span className="font-semibold text-zinc-900">Correct answer:</span>{' '}
+                                    {q.answer}
+                                  </div>
+                                  {q.explanation ? (
+                                    <div className="whitespace-pre-wrap">
+                                      <span className="font-semibold text-zinc-900">Explanation:</span>{' '}
+                                      {q.explanation}
+                                    </div>
+                                  ) : null}
+                                </div>
+                                <div
+                                  className={`mt-2 text-xs font-semibold ${
+                                    correct ? 'text-green-700' : 'text-red-700'
+                                  }`}
+                                >
+                                  {correct ? 'Correct' : 'Incorrect'}
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+              <div className="flex items-center justify-between gap-2 border-t border-zinc-200 px-6 py-4">
+                {quiz ? (
+                  <Button
+                    variant="outline"
+                    className="border-red-200 text-red-700 hover:bg-red-50 hover:text-red-700"
+                    onClick={() => void handleDeleteGeneratedQuiz(quiz.id)}
+                    disabled={quizLoading}
+                  >
+                    Delete
+                  </Button>
+                ) : (
+                  <div />
+                )}
+                <Button variant="outline" onClick={() => setQuizOpen(false)}>
+                  Close
+                </Button>
+              </div>
+            </div>
+          </div>
+        )}
+
         {suggestOpen && (
           <div className="fixed inset-0 z-50">
             <div
@@ -1476,6 +2366,22 @@ export default function AiChatbotPage() {
                 </button>
               </div>
               <div className="max-h-[24rem] space-y-3 overflow-y-auto px-6 py-4">
+                {suggestRegenerateError && (
+                  <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+                    {suggestRegenerateError}
+                  </div>
+                )}
+                {suggestRegenerating && (
+                  <div className="rounded-lg border border-zinc-200 bg-white p-4">
+                    <div className="flex items-center gap-3">
+                      <div className="h-5 w-5 animate-spin rounded-full border-2 border-zinc-300 border-t-zinc-900" />
+                      <div className="text-sm font-semibold text-zinc-900">Regenerating...</div>
+                    </div>
+                    <div className="mt-2 text-sm text-zinc-600">
+                      Generating new suggested questions for your current knowledge base.
+                    </div>
+                  </div>
+                )}
                 {suggestions.length === 0 ? (
                   <div className="rounded-lg border border-zinc-200 bg-white p-4 text-sm text-zinc-600">
                     No suggestions yet. Apply a knowledge base to generate them.
@@ -1521,12 +2427,19 @@ export default function AiChatbotPage() {
                 <div className="text-sm text-zinc-600">
                   {suggestions.length} question{suggestions.length === 1 ? '' : 's'} available
                 </div>
-                <Button
-                  variant="outline"
-                  onClick={() => setSuggestOpen(false)}
-                >
-                  Close
-                </Button>
+                <div className="flex items-center gap-2">
+                  <Button
+                    variant="outline"
+                    onClick={() => void regenerateSuggestions()}
+                    disabled={!kbApplied || kbApplying || suggestRegenerating}
+                  >
+                    <RotateCcw className="mr-2 h-4 w-4" />
+                    Regenerate
+                  </Button>
+                  <Button variant="outline" onClick={() => setSuggestOpen(false)}>
+                    Close
+                  </Button>
+                </div>
               </div>
             </div>
           </div>

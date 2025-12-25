@@ -753,6 +753,272 @@ export async function answerAI(params: {
   throw new Error('Invalid AI answer response');
 }
 
+export interface GeneratedFlashcard {
+  front: string;
+  back: string;
+}
+
+export interface GeneratedFlashcardSetResponse {
+  id: string;
+  title: string;
+  flashcards: GeneratedFlashcard[];
+  source_unit_ids: string[];
+}
+
+export async function generateFlashcards(
+  courseId: string,
+  params?: { learning_unit_ids?: string[]; quantity?: number; context?: string },
+): Promise<GeneratedFlashcardSetResponse> {
+  const response = await fetch(`${API_BASE_URL}/courses/${courseId}/flashcards/generate`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Accept: 'application/json',
+      ...getAuthHeaders(),
+    },
+    body: JSON.stringify({
+      learning_unit_ids: params?.learning_unit_ids,
+      quantity: params?.quantity,
+      context: params?.context,
+    }),
+  });
+
+  const data = await response.json().catch(() => ({}));
+
+  if (!response.ok) {
+    const msg = data?.error || data?.message || 'Failed to generate flashcards';
+    throw new Error(msg);
+  }
+
+  if (
+    data &&
+    typeof data === 'object' &&
+    typeof data.id === 'string' &&
+    typeof data.title === 'string' &&
+    Array.isArray(data.flashcards)
+  ) {
+    return data as GeneratedFlashcardSetResponse;
+  }
+
+  throw new Error('Invalid generate flashcards response');
+}
+
+export interface GeneratedFlashcardSetSummary {
+  id: string;
+  title: string;
+  flashcards_count: number;
+  created_at: string;
+}
+
+export async function listGeneratedFlashcardSets(courseId: string): Promise<GeneratedFlashcardSetSummary[]> {
+  const response = await fetch(`${API_BASE_URL}/courses/${courseId}/flashcards/generated`, {
+    method: 'GET',
+    headers: {
+      Accept: 'application/json',
+      ...getAuthHeaders(),
+    },
+  });
+
+  const data = await response.json().catch(() => ({}));
+
+  if (!response.ok) {
+    const msg = data?.error || data?.message || 'Failed to list generated flashcards';
+    throw new Error(msg);
+  }
+
+  if (Array.isArray(data?.flashcards)) {
+    return data.flashcards as GeneratedFlashcardSetSummary[];
+  }
+
+  return [];
+}
+
+export async function getGeneratedFlashcardSet(
+  courseId: string,
+  setId: string,
+): Promise<GeneratedFlashcardSetResponse> {
+  const response = await fetch(`${API_BASE_URL}/courses/${courseId}/flashcards/generated/${setId}`, {
+    method: 'GET',
+    headers: {
+      Accept: 'application/json',
+      ...getAuthHeaders(),
+    },
+  });
+
+  const data = await response.json().catch(() => ({}));
+
+  if (!response.ok) {
+    const msg = data?.error || data?.message || 'Failed to fetch generated flashcards';
+    throw new Error(msg);
+  }
+
+  if (
+    data &&
+    typeof data === 'object' &&
+    typeof data.id === 'string' &&
+    typeof data.title === 'string' &&
+    Array.isArray(data.flashcards)
+  ) {
+    return data as GeneratedFlashcardSetResponse;
+  }
+
+  throw new Error('Invalid generated flashcards response');
+}
+
+export async function deleteGeneratedFlashcardSet(courseId: string, setId: string): Promise<void> {
+  const response = await fetch(`${API_BASE_URL}/courses/${courseId}/flashcards/generated/${setId}`, {
+    method: 'DELETE',
+    headers: {
+      Accept: 'application/json',
+      ...getAuthHeaders(),
+    },
+  });
+
+  const data = await response.json().catch(() => ({}));
+
+  if (!response.ok) {
+    const msg = data?.error || data?.message || 'Failed to delete generated flashcards';
+    throw new Error(msg);
+  }
+}
+
+export interface GeneratedQuizQuestion {
+  question: string;
+  options: string[];
+  answer: string;
+  explanation: string;
+  points: number;
+}
+
+export interface GeneratedQuizResponse {
+  id: string;
+  title: string;
+  questions: GeneratedQuizQuestion[];
+  source_unit_ids: string[];
+}
+
+export type QuizDifficulty = 'easy' | 'medium' | 'hard';
+
+export async function generateQuiz(
+  courseId: string,
+  params?: {
+    learning_unit_ids?: string[];
+    quantity?: number;
+    context?: string;
+    difficulty?: QuizDifficulty;
+  },
+): Promise<GeneratedQuizResponse> {
+  const response = await fetch(`${API_BASE_URL}/courses/${courseId}/quiz/generate`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Accept: 'application/json',
+      ...getAuthHeaders(),
+    },
+    body: JSON.stringify({
+      learning_unit_ids: params?.learning_unit_ids,
+      quantity: params?.quantity,
+      context: params?.context,
+      difficulty: params?.difficulty,
+    }),
+  });
+
+  const data = await response.json().catch(() => ({}));
+
+  if (!response.ok) {
+    const msg = data?.error || data?.message || 'Failed to generate quiz';
+    throw new Error(msg);
+  }
+
+  if (
+    data &&
+    typeof data === 'object' &&
+    typeof data.id === 'string' &&
+    typeof data.title === 'string' &&
+    Array.isArray(data.questions)
+  ) {
+    return data as GeneratedQuizResponse;
+  }
+
+  throw new Error('Invalid generate quiz response');
+}
+
+export interface GeneratedQuizSummary {
+  id: string;
+  title: string;
+  questions_count: number;
+  created_at: string;
+}
+
+export async function listGeneratedQuizzes(courseId: string): Promise<GeneratedQuizSummary[]> {
+  const response = await fetch(`${API_BASE_URL}/courses/${courseId}/quizzes/generated`, {
+    method: 'GET',
+    headers: {
+      Accept: 'application/json',
+      ...getAuthHeaders(),
+    },
+  });
+
+  const data = await response.json().catch(() => ({}));
+
+  if (!response.ok) {
+    const msg = data?.error || data?.message || 'Failed to list generated quizzes';
+    throw new Error(msg);
+  }
+
+  if (Array.isArray(data?.quizzes)) {
+    return data.quizzes as GeneratedQuizSummary[];
+  }
+
+  return [];
+}
+
+export async function getGeneratedQuiz(courseId: string, quizId: string): Promise<GeneratedQuizResponse> {
+  const response = await fetch(`${API_BASE_URL}/courses/${courseId}/quizzes/generated/${quizId}`, {
+    method: 'GET',
+    headers: {
+      Accept: 'application/json',
+      ...getAuthHeaders(),
+    },
+  });
+
+  const data = await response.json().catch(() => ({}));
+
+  if (!response.ok) {
+    const msg = data?.error || data?.message || 'Failed to fetch generated quiz';
+    throw new Error(msg);
+  }
+
+  if (
+    data &&
+    typeof data === 'object' &&
+    typeof data.id === 'string' &&
+    typeof data.title === 'string' &&
+    Array.isArray(data.questions)
+  ) {
+    return data as GeneratedQuizResponse;
+  }
+
+  throw new Error('Invalid generated quiz response');
+}
+
+export async function deleteGeneratedQuiz(courseId: string, quizId: string): Promise<void> {
+  const response = await fetch(`${API_BASE_URL}/courses/${courseId}/quizzes/generated/${quizId}`, {
+    method: 'DELETE',
+    headers: {
+      Accept: 'application/json',
+      ...getAuthHeaders(),
+    },
+  });
+
+  const data = await response.json().catch(() => ({}));
+
+  if (!response.ok) {
+    const msg = data?.error || data?.message || 'Failed to delete generated quiz';
+    throw new Error(msg);
+  }
+}
+
 export interface LearningUnitSummary {
   unit_id: string;
   material_count: number;
