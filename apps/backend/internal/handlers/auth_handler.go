@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"errors"
 	"net/http"
 
 	"lay.ai/backend/internal/middleware"
@@ -109,9 +110,26 @@ func (h *AuthHandler) LoginUserHandler(c *gin.Context) {
 	// Call AuthService to authenticate user
 	loginResponse, err := h.authService.LoginUser(req.Email, req.Password)
 	if err != nil {
-		// Return generic error message for security (don't reveal if email exists)
-		c.JSON(http.StatusUnauthorized, gin.H{
-			"error": "Invalid email or password",
+		if errors.Is(err, services.ErrPendingApproval) {
+			c.JSON(http.StatusForbidden, gin.H{
+				"error": "Your account is pending approval. Please wait for admin approval.",
+			})
+			return
+		}
+		if errors.Is(err, services.ErrInactiveAccount) {
+			c.JSON(http.StatusForbidden, gin.H{
+				"error": "Your account is inactive. Please contact an administrator.",
+			})
+			return
+		}
+		if errors.Is(err, services.ErrInvalidCredentials) {
+			c.JSON(http.StatusUnauthorized, gin.H{
+				"error": "Invalid email or password",
+			})
+			return
+		}
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"error": "Failed to login",
 		})
 		return
 	}

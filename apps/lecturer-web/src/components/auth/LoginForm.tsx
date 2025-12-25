@@ -61,6 +61,14 @@ export function LoginForm() {
         setError('Only lecturer accounts can sign in here.');
         return;
       }
+      if (response.user.status === 'pending_approval') {
+        setError('Your account is pending approval. Please wait for admin approval.');
+        return;
+      }
+      if (response.user.status === 'inactive') {
+        setError('Your account is inactive. Please contact an administrator.');
+        return;
+      }
       if (formData.rememberMe) {
         localStorage.setItem('token', response.token);
         localStorage.setItem('user', JSON.stringify(response.user));

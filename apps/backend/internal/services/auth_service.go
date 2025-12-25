@@ -1,6 +1,7 @@
 package services
 
 import (
+	"errors"
 	"fmt"
 
 	"lay.ai/backend/internal/models"
@@ -8,6 +9,12 @@ import (
 	"lay.ai/backend/internal/utils"
 
 	"golang.org/x/crypto/bcrypt"
+)
+
+var (
+	ErrInvalidCredentials = errors.New("invalid credentials")
+	ErrPendingApproval    = errors.New("pending approval")
+	ErrInactiveAccount    = errors.New("inactive account")
 )
 
 // AuthService handles authentication business logic
@@ -59,44 +66,34 @@ func (s *AuthService) RegisterUser(name, email string, uniqueIdentifier string, 
 
 // LoginUser handles user login business logic
 func (s *AuthService) LoginUser(email, password string) (*models.LoginResponse, error) {
-	fmt.Printf("DEBUG: Login attempt for email: %s\n", email)
-	fmt.Printf("DEBUG: Password length: %d\n", len(password))
-	
 	// Get user by email
 	user, err := s.userStore.GetUserByEmail(email)
 	if err != nil {
-		fmt.Printf("DEBUG: GetUserByEmail failed: %v\n", err)
-		return nil, fmt.Errorf("invalid email or password")
-	}
-	
-	fmt.Printf("DEBUG: User found - ID: %s, Email: %s, Status: %s\n", user.ID, user.Email, user.Status)
-	fmt.Printf("DEBUG: Password hash from DB: %s\n", user.PasswordHash)
-	fmt.Printf("DEBUG: Password hash length: %d\n", len(user.PasswordHash))
-
-	// Check if user is active
-	if user.Status != models.StatusActive {
-		fmt.Printf("DEBUG: User status is not active: %s\n", user.Status)
-		return nil, fmt.Errorf("account is not active")
+		return nil, ErrInvalidCredentials
 	}
 
-	fmt.Printf("DEBUG: About to compare password...\n")
+	// Check if user is allowed to log in based on status
+	switch user.Status {
+	case models.StatusActive:
+	case models.StatusPendingApproval:
+		return nil, ErrPendingApproval
+	case models.StatusInactive:
+		return nil, ErrInactiveAccount
+	default:
+		return nil, ErrInactiveAccount
+	}
+
 	// Verify password
 	err = bcrypt.CompareHashAndPassword([]byte(user.PasswordHash), []byte(password))
 	if err != nil {
-		fmt.Printf("DEBUG: Password comparison failed: %v\n", err)
-		return nil, fmt.Errorf("invalid email or password")
+		return nil, ErrInvalidCredentials
 	}
-
-	fmt.Printf("DEBUG: Password comparison successful!\n")
 
 	// Generate JWT token
 	token, err := utils.GenerateJWT(user.ID.String(), user.Email)
 	if err != nil {
-		fmt.Printf("DEBUG: JWT generation failed: %v\n", err)
 		return nil, fmt.Errorf("failed to generate token: %w", err)
 	}
-
-	fmt.Printf("DEBUG: JWT generated successfully\n")
 
 	// Create response
 	response := &models.LoginResponse{
