@@ -275,10 +275,27 @@ type GeneratedFlashcardSetResponse struct {
 	SourceUnitIDs []uuid.UUID          `json:"source_unit_ids"`
 }
 
+type GenerateQuizOptions struct {
+	QuestionCount int
+	Context       string
+	Difficulty    string
+}
+
+type GenerateFlashcardsOptions struct {
+	FlashcardCount int
+	Context        string
+}
+
 // GenerateQuiz generates a quiz based on the content of the provided learning units.
-func (s *AIService) GenerateQuiz(ctx context.Context, userID, courseID uuid.UUID, unitIDs []uuid.UUID) (*GeneratedQuizResponse, error) {
+func (s *AIService) GenerateQuiz(ctx context.Context, userID, courseID uuid.UUID, unitIDs []uuid.UUID, opts GenerateQuizOptions) (*GeneratedQuizResponse, error) {
 	if len(unitIDs) == 0 {
 		return nil, errors.New("no learning units provided")
+	}
+	if opts.QuestionCount <= 0 {
+		opts.QuestionCount = 5
+	}
+	if opts.QuestionCount > 20 {
+		return nil, errors.New("question count must be between 1 and 20")
 	}
 
 	// 1. Fetch relevant content chunks
@@ -298,6 +315,15 @@ func (s *AIService) GenerateQuiz(ctx context.Context, userID, courseID uuid.UUID
 		contentBuilder.WriteString("\n---\n")
 	}
 
+	contextLine := ""
+	if strings.TrimSpace(opts.Context) != "" {
+		contextLine = fmt.Sprintf("Focus on this specific context (if relevant): %s\n\n", strings.TrimSpace(opts.Context))
+	}
+	difficultyLine := ""
+	if strings.TrimSpace(opts.Difficulty) != "" {
+		difficultyLine = fmt.Sprintf("Difficulty: %s\n\n", strings.TrimSpace(opts.Difficulty))
+	}
+
 	prompt := fmt.Sprintf(`
 You are an expert educational AI. Generate a quiz based on the following content.
 The quiz should test understanding of the key concepts found in the text.
@@ -305,8 +331,8 @@ The quiz should test understanding of the key concepts found in the text.
 Content:
 %s
 
-Instructions:
-1. Generate 5 multiple-choice questions.
+%s%sInstructions:
+1. Generate %d multiple-choice questions.
 2. Each question must have 4 options.
 3. Provide the correct answer (must be one of the options).
 4. Provide a brief explanation for the correct answer.
@@ -325,7 +351,7 @@ Instructions:
   ]
 }
 Do not include any markdown formatting (like backtick json) in the response. Just the raw JSON.
-`, contentBuilder.String())
+`, contentBuilder.String(), contextLine, difficultyLine, opts.QuestionCount)
 
 	// 3. Call Gemini
 	if s.client == nil {
@@ -395,9 +421,15 @@ Do not include any markdown formatting (like backtick json) in the response. Jus
 }
 
 // GenerateFlashcards generates flashcards based on the content of the provided learning units.
-func (s *AIService) GenerateFlashcards(ctx context.Context, userID, courseID uuid.UUID, unitIDs []uuid.UUID) (*GeneratedFlashcardSetResponse, error) {
+func (s *AIService) GenerateFlashcards(ctx context.Context, userID, courseID uuid.UUID, unitIDs []uuid.UUID, opts GenerateFlashcardsOptions) (*GeneratedFlashcardSetResponse, error) {
 	if len(unitIDs) == 0 {
 		return nil, errors.New("no learning units provided")
+	}
+	if opts.FlashcardCount <= 0 {
+		opts.FlashcardCount = 10
+	}
+	if opts.FlashcardCount > 20 {
+		return nil, errors.New("flashcard count must be between 1 and 20")
 	}
 
 	// 1. Fetch relevant content chunks
@@ -417,6 +449,11 @@ func (s *AIService) GenerateFlashcards(ctx context.Context, userID, courseID uui
 		contentBuilder.WriteString("\n---\n")
 	}
 
+	flashcardContextLine := ""
+	if strings.TrimSpace(opts.Context) != "" {
+		flashcardContextLine = fmt.Sprintf("Focus on this specific context (if relevant): %s\n\n", strings.TrimSpace(opts.Context))
+	}
+
 	prompt := fmt.Sprintf(`
 You are an expert educational AI. Generate a set of flashcards based on the following content.
 The flashcards should help students memorize key concepts, definitions, and facts found in the text.
@@ -424,8 +461,8 @@ The flashcards should help students memorize key concepts, definitions, and fact
 Content:
 %s
 
-Instructions:
-1. Generate 10 flashcards.
+%sInstructions:
+1. Generate %d flashcards.
 2. Each flashcard must have a "front" (question/term) and a "back" (answer/definition).
 3. The front should be concise.
 4. The back should be accurate and easy to understand.
@@ -441,7 +478,7 @@ Instructions:
   ]
 }
 Do not include any markdown formatting (like backtick json) in the response. Just the raw JSON.
-`, contentBuilder.String())
+`, contentBuilder.String(), flashcardContextLine, opts.FlashcardCount)
 
 	// 3. Call Gemini
 	if s.client == nil {
@@ -508,6 +545,62 @@ Do not include any markdown formatting (like backtick json) in the response. Jus
 	}
 
 	return &flashcardResp, nil
+}
+
+func (s *AIService) ListGeneratedFlashcardSets(ctx context.Context, userID, courseID uuid.UUID) ([]models.GeneratedFlashcardSet, error) {
+	if s.genStore == nil {
+		return nil, errors.New("generated content store not initialized")
+	}
+	return s.genStore.GetGeneratedFlashcardSetsByUserAndCourseID(ctx, userID, courseID)
+}
+
+func (s *AIService) GetGeneratedFlashcardSet(ctx context.Context, userID, courseID, setID uuid.UUID) (*models.GeneratedFlashcardSet, error) {
+	if s.genStore == nil {
+		return nil, errors.New("generated content store not initialized")
+	}
+	set, err := s.genStore.GetGeneratedFlashcardSetByID(ctx, setID)
+	if err != nil {
+		return nil, err
+	}
+	if set.UserID != userID || set.CourseID != courseID {
+		return nil, errors.New("generated flashcard set not found")
+	}
+	return set, nil
+}
+
+func (s *AIService) DeleteGeneratedFlashcardSet(ctx context.Context, userID, courseID, setID uuid.UUID) error {
+	if s.genStore == nil {
+		return errors.New("generated content store not initialized")
+	}
+	return s.genStore.DeleteGeneratedFlashcardSet(ctx, setID, userID, courseID)
+}
+
+func (s *AIService) ListGeneratedQuizzes(ctx context.Context, userID, courseID uuid.UUID) ([]models.GeneratedQuiz, error) {
+	if s.genStore == nil {
+		return nil, errors.New("generated content store not initialized")
+	}
+	return s.genStore.GetGeneratedQuizzesByUserAndCourseID(ctx, userID, courseID)
+}
+
+func (s *AIService) GetGeneratedQuiz(ctx context.Context, userID, courseID, quizID uuid.UUID) (*models.GeneratedQuiz, error) {
+	if s.genStore == nil {
+		return nil, errors.New("generated content store not initialized")
+	}
+	quiz, err := s.genStore.GetGeneratedQuizByID(ctx, quizID)
+	if err != nil {
+		return nil, err
+	}
+	if quiz.UserID != userID || quiz.CourseID != courseID {
+		return nil, errors.New("generated quiz not found")
+	}
+	return quiz, nil
+}
+
+func (s *AIService) DeleteGeneratedQuiz(ctx context.Context, userID, courseID, quizID uuid.UUID) error {
+	if s.genStore == nil {
+		return errors.New("generated content store not initialized")
+	}
+	return s.genStore.DeleteGeneratedQuiz(ctx, quizID, userID, courseID)
 }
 
 // IngestPDF downloads a PDF from R2, creates a document record, chunks content,

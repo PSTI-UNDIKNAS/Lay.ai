@@ -139,8 +139,14 @@ func SetupRoutes(db *pgxpool.Pool) *gin.Engine {
 		{
 			courses.GET("", courseHandler.GetCourses)
 			courses.GET("/:courseId", courseHandler.GetCourseByID)
-			courses.POST("/:courseId/quiz/generate", middleware.AuthWithStatusMiddleware(authService), middleware.EnrollmentRequiredMiddleware(enrollmentStore), quizHandler.GenerateQuiz)
-			courses.POST("/:courseId/flashcards/generate", middleware.AuthWithStatusMiddleware(authService), middleware.EnrollmentRequiredMiddleware(enrollmentStore), quizHandler.GenerateFlashcards)
+			courses.POST("/:courseId/quiz/generate", middleware.AuthWithStatusMiddleware(authService), middleware.EnrollmentOrCourseOwnerMiddleware(authService, enrollmentStore, courseService), quizHandler.GenerateQuiz)
+			courses.POST("/:courseId/flashcards/generate", middleware.AuthWithStatusMiddleware(authService), middleware.EnrollmentOrCourseOwnerMiddleware(authService, enrollmentStore, courseService), quizHandler.GenerateFlashcards)
+			courses.GET("/:courseId/flashcards/generated", middleware.AuthWithStatusMiddleware(authService), middleware.EnrollmentOrCourseOwnerMiddleware(authService, enrollmentStore, courseService), quizHandler.ListGeneratedFlashcards)
+			courses.GET("/:courseId/flashcards/generated/:setId", middleware.AuthWithStatusMiddleware(authService), middleware.EnrollmentOrCourseOwnerMiddleware(authService, enrollmentStore, courseService), quizHandler.GetGeneratedFlashcardSet)
+			courses.DELETE("/:courseId/flashcards/generated/:setId", middleware.AuthWithStatusMiddleware(authService), middleware.EnrollmentOrCourseOwnerMiddleware(authService, enrollmentStore, courseService), quizHandler.DeleteGeneratedFlashcardSet)
+			courses.GET("/:courseId/quizzes/generated", middleware.AuthWithStatusMiddleware(authService), middleware.EnrollmentOrCourseOwnerMiddleware(authService, enrollmentStore, courseService), quizHandler.ListGeneratedQuizzes)
+			courses.GET("/:courseId/quizzes/generated/:quizId", middleware.AuthWithStatusMiddleware(authService), middleware.EnrollmentOrCourseOwnerMiddleware(authService, enrollmentStore, courseService), quizHandler.GetGeneratedQuiz)
+			courses.DELETE("/:courseId/quizzes/generated/:quizId", middleware.AuthWithStatusMiddleware(authService), middleware.EnrollmentOrCourseOwnerMiddleware(authService, enrollmentStore, courseService), quizHandler.DeleteGeneratedQuiz)
 
 			courses.GET("/me", middleware.AuthWithStatusMiddleware(authService), middleware.LecturerOnlyMiddleware(authService), courseHandler.GetMyCourses)
 			courses.POST("", middleware.AuthWithStatusMiddleware(authService), middleware.LecturerOnlyMiddleware(authService), courseHandler.CreateCourse)
