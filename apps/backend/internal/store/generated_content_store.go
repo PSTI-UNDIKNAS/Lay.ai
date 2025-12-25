@@ -89,6 +89,44 @@ func (s *GeneratedContentStore) GetGeneratedQuizzesByUserID(ctx context.Context,
 	return quizzes, nil
 }
 
+func (s *GeneratedContentStore) GetGeneratedQuizzesByUserAndCourseID(ctx context.Context, userID uuid.UUID, courseID uuid.UUID) ([]models.GeneratedQuiz, error) {
+	query := `
+		SELECT id, user_id, course_id, title, quiz_data, source_unit_ids, created_at, updated_at
+		FROM generated_quizzes
+		WHERE user_id = $1 AND course_id = $2
+		ORDER BY created_at DESC
+	`
+	rows, err := s.db.Query(ctx, query, userID, courseID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query generated quizzes: %w", err)
+	}
+	defer rows.Close()
+
+	var quizzes []models.GeneratedQuiz
+	for rows.Next() {
+		var q models.GeneratedQuiz
+		if err := rows.Scan(&q.ID, &q.UserID, &q.CourseID, &q.Title, &q.QuizData, &q.SourceUnitIDs, &q.CreatedAt, &q.UpdatedAt); err != nil {
+			return nil, fmt.Errorf("failed to scan generated quiz: %w", err)
+		}
+		quizzes = append(quizzes, q)
+	}
+	return quizzes, nil
+}
+
+func (s *GeneratedContentStore) DeleteGeneratedQuiz(ctx context.Context, id uuid.UUID, userID uuid.UUID, courseID uuid.UUID) error {
+	cmd, err := s.db.Exec(ctx, `
+		DELETE FROM generated_quizzes
+		WHERE id = $1 AND user_id = $2 AND course_id = $3
+	`, id, userID, courseID)
+	if err != nil {
+		return fmt.Errorf("failed to delete generated quiz: %w", err)
+	}
+	if cmd.RowsAffected() == 0 {
+		return fmt.Errorf("generated quiz not found")
+	}
+	return nil
+}
+
 // CreateGeneratedFlashcardSet creates a new generated flashcard set record
 func (s *GeneratedContentStore) CreateGeneratedFlashcardSet(ctx context.Context, set *models.GeneratedFlashcardSet) error {
 	query := `
@@ -157,4 +195,42 @@ func (s *GeneratedContentStore) GetGeneratedFlashcardSetsByUserID(ctx context.Co
 		sets = append(sets, s)
 	}
 	return sets, nil
+}
+
+func (s *GeneratedContentStore) GetGeneratedFlashcardSetsByUserAndCourseID(ctx context.Context, userID uuid.UUID, courseID uuid.UUID) ([]models.GeneratedFlashcardSet, error) {
+	query := `
+		SELECT id, user_id, course_id, title, flashcards_data, source_unit_ids, created_at, updated_at
+		FROM generated_flashcard_sets
+		WHERE user_id = $1 AND course_id = $2
+		ORDER BY created_at DESC
+	`
+	rows, err := s.db.Query(ctx, query, userID, courseID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query generated flashcard sets: %w", err)
+	}
+	defer rows.Close()
+
+	var sets []models.GeneratedFlashcardSet
+	for rows.Next() {
+		var s models.GeneratedFlashcardSet
+		if err := rows.Scan(&s.ID, &s.UserID, &s.CourseID, &s.Title, &s.FlashcardsData, &s.SourceUnitIDs, &s.CreatedAt, &s.UpdatedAt); err != nil {
+			return nil, fmt.Errorf("failed to scan generated flashcard set: %w", err)
+		}
+		sets = append(sets, s)
+	}
+	return sets, nil
+}
+
+func (s *GeneratedContentStore) DeleteGeneratedFlashcardSet(ctx context.Context, id uuid.UUID, userID uuid.UUID, courseID uuid.UUID) error {
+	cmd, err := s.db.Exec(ctx, `
+		DELETE FROM generated_flashcard_sets
+		WHERE id = $1 AND user_id = $2 AND course_id = $3
+	`, id, userID, courseID)
+	if err != nil {
+		return fmt.Errorf("failed to delete generated flashcard set: %w", err)
+	}
+	if cmd.RowsAffected() == 0 {
+		return fmt.Errorf("generated flashcard set not found")
+	}
+	return nil
 }

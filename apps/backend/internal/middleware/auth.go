@@ -121,6 +121,110 @@ func EnrollmentRequiredMiddleware(enrollmentService interface {
 	}
 }
 
+func EnrollmentOrCourseOwnerMiddleware(
+	authService *services.AuthService,
+	enrollmentService interface {
+		GetEnrollmentByStudentAndCourse(studentID, courseID string) (*models.Enrollment, error)
+	},
+	courseService interface {
+		GetCourseByID(courseID string) (*models.Course, error)
+	},
+) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		userID, exists := c.Get("user_id")
+		if !exists {
+			c.JSON(http.StatusUnauthorized, gin.H{
+				"error": "Authentication required",
+			})
+			c.Abort()
+			return
+		}
+
+		userIDStr, ok := userID.(string)
+		if !ok {
+			c.JSON(http.StatusInternalServerError, gin.H{
+				"error": "Invalid user ID format",
+			})
+			c.Abort()
+			return
+		}
+
+		courseID := c.Param("courseId")
+		if courseID == "" {
+			c.JSON(http.StatusBadRequest, gin.H{
+				"error": "Course ID is required",
+			})
+			c.Abort()
+			return
+		}
+
+		user, err := authService.GetUserByID(userIDStr)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{
+				"error": "Failed to verify user permissions",
+			})
+			c.Abort()
+			return
+		}
+
+		if user.Role == models.RoleLecturer {
+			course, courseErr := courseService.GetCourseByID(courseID)
+			if courseErr != nil {
+				c.JSON(http.StatusNotFound, gin.H{
+					"error": "Course not found",
+				})
+				c.Abort()
+				return
+			}
+			if course.CreatorID.String() != userIDStr {
+				c.JSON(http.StatusForbidden, gin.H{
+					"error": "You can only access courses you created",
+				})
+				c.Abort()
+				return
+			}
+			c.Next()
+			return
+		}
+
+		if user.Role != models.RoleStudent {
+			c.JSON(http.StatusForbidden, gin.H{
+				"error": "Insufficient permissions",
+			})
+			c.Abort()
+			return
+		}
+
+		enrollment, err := enrollmentService.GetEnrollmentByStudentAndCourse(userIDStr, courseID)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{
+				"error": "Failed to verify enrollment",
+			})
+			c.Abort()
+			return
+		}
+
+		if enrollment == nil {
+			c.JSON(http.StatusForbidden, gin.H{
+				"error": "You must be enrolled in this course to access this resource",
+			})
+			c.Abort()
+			return
+		}
+
+		if enrollment.Status != models.EnrollmentStatusEnrolled {
+			c.JSON(http.StatusForbidden, gin.H{
+				"error": "Your enrollment in this course is not active",
+			})
+			c.Abort()
+			return
+		}
+
+		c.Set("enrollment", enrollment)
+		c.Next()
+	}
+}
+
 // CourseOwnershipMiddleware verifies that the authenticated lecturer owns the course
 func CourseOwnershipMiddleware(courseService interface {
 	GetCourseByID(courseID string) (*models.Course, error)
@@ -325,7 +429,7 @@ func RequireRole(requiredRole string) gin.HandlerFunc {
 		// In a real implementation, you would fetch the user's role from the database
 		// For now, we'll assume the role is stored in the JWT claims
 		// You can extend this by adding role to JWT claims or fetching from database
-		
+
 		// For demonstration, we'll check if the user is authenticated
 		// In practice, you'd want to fetch the user's role and compare
 		if userID == "" {
