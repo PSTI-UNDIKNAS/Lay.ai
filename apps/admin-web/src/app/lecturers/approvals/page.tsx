@@ -58,18 +58,32 @@ export default function LecturerApprovalsPage() {
           <div className="overflow-x-auto">
             <div className="relative">
               <table className="min-w-full table-fixed">
+                <colgroup>
+                  <col className="w-1/4" />
+                  <col className="w-1/4" />
+                  <col className="w-1/4" />
+                  <col className="w-24" />
+                  <col className="w-48" />
+                </colgroup>
                 <thead>
                   <tr className="border-b border-zinc-200">
-                    <th className="px-4 py-3 text-left text-xs font-semibold text-zinc-600 w-1/4">Applicant</th>
-                    <th className="px-4 py-3 text-left text-xs font-semibold text-zinc-600 w-1/4">Unique ID</th>
-                    <th className="px-4 py-3 text-left text-xs font-semibold text-zinc-600 w-1/4">Applied Date</th>
-                    <th className="px-4 py-3 text-left text-xs font-semibold text-zinc-600 w-24">Status</th>
-                    <th className="px-4 py-3 text-left text-xs font-semibold text-zinc-600 w-48">Actions</th>
+                    <th className="px-4 py-3 text-left text-xs font-semibold text-zinc-600">Applicant</th>
+                    <th className="px-4 py-3 text-left text-xs font-semibold text-zinc-600">Unique ID</th>
+                    <th className="px-4 py-3 text-left text-xs font-semibold text-zinc-600">Applied Date</th>
+                    <th className="px-4 py-3 text-left text-xs font-semibold text-zinc-600">Status</th>
+                    <th className="px-4 py-3 text-left text-xs font-semibold text-zinc-600">Actions</th>
                   </tr>
                 </thead>
               </table>
               <div className="max-h-96 overflow-y-auto">
                 <table className="min-w-full table-fixed">
+                  <colgroup>
+                    <col className="w-1/4" />
+                    <col className="w-1/4" />
+                    <col className="w-1/4" />
+                    <col className="w-24" />
+                    <col className="w-48" />
+                  </colgroup>
                   <tbody>
                     {loading && (
                       <tr>
