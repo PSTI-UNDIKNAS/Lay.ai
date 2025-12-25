@@ -87,92 +87,88 @@ export default function ManageStudentsPage() {
 
         <Card>
           <div className="overflow-x-auto">
-            <div className="relative">
+            <div className="max-h-96 overflow-y-auto">
               <table className="min-w-full table-fixed">
-                <thead>
+                <thead className="sticky top-0 z-10 bg-white">
                   <tr className="border-b border-zinc-200">
-                    <th className="px-4 py-3 text-left text-xs font-semibold text-zinc-600 w-1/2">Student</th>
-                    <th className="px-4 py-3 text-left text-xs font-semibold text-zinc-600 w-1/2">NIM</th>
-                    <th className="px-4 py-3 text-left text-xs font-semibold text-zinc-600 w-32">Join Date</th>
-                    <th className="px-4 py-3 text-left text-xs font-semibold text-zinc-600 w-24">Status</th>
-                    <th className="px-4 py-3 text-left text-xs font-semibold text-zinc-600 w-32">Actions</th>
+                    <th className="w-1/3 px-4 py-3 text-left text-xs font-semibold text-zinc-600">Student</th>
+                    <th className="w-1/4 px-4 py-3 text-left text-xs font-semibold text-zinc-600">NIM</th>
+                    <th className="w-32 px-4 py-3 text-left text-xs font-semibold text-zinc-600">Join Date</th>
+                    <th className="w-24 px-4 py-3 text-left text-xs font-semibold text-zinc-600">Status</th>
+                    <th className="w-32 px-4 py-3 text-left text-xs font-semibold text-zinc-600">Actions</th>
                   </tr>
                 </thead>
+                <tbody>
+                  {loading && (
+                    <tr>
+                      <td className="px-4 py-6 text-sm text-zinc-600" colSpan={5}>Loading students…</td>
+                    </tr>
+                  )}
+                  {error && !loading && (
+                    <tr>
+                      <td className="px-4 py-6 text-sm text-red-700" colSpan={5}>{error}</td>
+                    </tr>
+                  )}
+                  {!loading && !error && students.length === 0 && (
+                    <tr>
+                      <td className="px-4 py-6 text-sm text-zinc-600" colSpan={5}>No students found</td>
+                    </tr>
+                  )}
+                  {!loading && !error && students.map((row) => (
+                    <tr key={row.id} className="border-b border-zinc-100">
+                      <td className="px-4 py-4">
+                        <div className="flex items-center gap-3">
+                          <div className="flex h-9 w-9 items-center justify-center rounded-full bg-zinc-100 text-xs font-semibold text-zinc-700">
+                            {row.name.split(' ').map((n) => n[0]).slice(0, 2).join('')}
+                          </div>
+                          <div>
+                            <div className="text-sm font-medium text-zinc-900">{row.name}</div>
+                            <div className="text-xs text-zinc-600">{row.email}</div>
+                          </div>
+                        </div>
+                      </td>
+                      <td className="px-4 py-4">
+                        <div className="text-sm text-zinc-900">{row.unique_identifier}</div>
+                      </td>
+                      <td className="px-4 py-4">
+                        <div className="text-sm text-zinc-900">{new Date(row.created_at).toLocaleDateString()}</div>
+                      </td>
+                      <td className="px-4 py-4">
+                        <StatusBadge status={row.status} />
+                      </td>
+                      <td className="px-4 py-4">
+                        <div className="flex items-center gap-2">
+                          <Button
+                            variant="outline"
+                            className="border-zinc-200 text-zinc-700 hover:bg-zinc-50"
+                            onClick={() => setEditingUser(row)}
+                          >
+                            <Pencil className="h-4 w-4" />
+                          </Button>
+                          <Button
+                            variant="outline"
+                            className="border-red-200 text-red-700 hover:bg-red-50"
+                            onClick={async () => {
+                              if (!confirm('Delete this student?')) return
+                              try {
+                                await deleteUser(row.id)
+                                setStudents((list) => list.filter((u) => u.id !== row.id))
+                              } catch (e) {
+                                alert(e instanceof Error ? e.message : 'Failed to delete user')
+                              }
+                            }}
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                          <Button variant="outline" className="border-zinc-200 text-zinc-700 hover:bg-zinc-50">
+                            <MoreVertical className="h-4 w-4" />
+                          </Button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
               </table>
-              <div className="max-h-96 overflow-y-auto">
-                <table className="min-w-full table-fixed">
-                  <tbody>
-                    {loading && (
-                      <tr>
-                        <td className="px-4 py-6 text-sm text-zinc-600" colSpan={5}>Loading students…</td>
-                      </tr>
-                    )}
-                    {error && !loading && (
-                      <tr>
-                        <td className="px-4 py-6 text-sm text-red-700" colSpan={5}>{error}</td>
-                      </tr>
-                    )}
-                    {!loading && !error && students.length === 0 && (
-                      <tr>
-                        <td className="px-4 py-6 text-sm text-zinc-600" colSpan={5}>No students found</td>
-                      </tr>
-                    )}
-                    {!loading && !error && students.map((row) => (
-                      <tr key={row.id} className="border-b border-zinc-100">
-                        <td className="px-4 py-4">
-                          <div className="flex items-center gap-3">
-                            <div className="flex h-9 w-9 items-center justify-center rounded-full bg-zinc-100 text-zinc-700 text-xs font-semibold">
-                              {row.name.split(' ').map((n) => n[0]).slice(0, 2).join('')}
-                            </div>
-                            <div>
-                              <div className="text-sm font-medium text-zinc-900">{row.name}</div>
-                              <div className="text-xs text-zinc-600">{row.email}</div>
-                            </div>
-                          </div>
-                        </td>
-                        <td className="px-4 py-4">
-                          <div className="text-sm text-zinc-900">{row.unique_identifier}</div>
-                        </td>
-                        <td className="px-4 py-4">
-                          <div className="text-sm text-zinc-900">{new Date(row.created_at).toLocaleDateString()}</div>
-                        </td>
-                        <td className="px-4 py-4">
-                          <StatusBadge status={row.status} />
-                        </td>
-                        <td className="px-4 py-4">
-                          <div className="flex items-center gap-2">
-                            <Button
-                              variant="outline"
-                              className="border-zinc-200 text-zinc-700 hover:bg-zinc-50"
-                              onClick={() => setEditingUser(row)}
-                            >
-                              <Pencil className="h-4 w-4" />
-                            </Button>
-                            <Button
-                              variant="outline"
-                              className="border-red-200 text-red-700 hover:bg-red-50"
-                              onClick={async () => {
-                                if (!confirm('Delete this student?')) return
-                                try {
-                                  await deleteUser(row.id)
-                                  setStudents((list) => list.filter((u) => u.id !== row.id))
-                                } catch (e) {
-                                  alert(e instanceof Error ? e.message : 'Failed to delete user')
-                                }
-                              }}
-                            >
-                              <Trash2 className="h-4 w-4" />
-                            </Button>
-                            <Button variant="outline" className="border-zinc-200 text-zinc-700 hover:bg-zinc-50">
-                              <MoreVertical className="h-4 w-4" />
-                            </Button>
-                          </div>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
             </div>
           </div>
         </Card>
