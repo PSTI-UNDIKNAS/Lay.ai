@@ -1,123 +1,103 @@
 'use client';
 
-import { useState, useEffect } from 'react';
-import { useRouter } from 'next/navigation';
-
-interface User {
-  id: string;
-  name: string;
-  email: string;
-  role: string;
-  status: string;
-  unique_identifier: string;
-}
+import { useEffect, useState } from 'react';
+import { BookOpen, Bot, CalendarClock, GraduationCap, Trophy } from 'lucide-react';
+import Link from 'next/link';
+import StudentShell from '@/components/student/StudentShell';
+import DashboardHeader from '@/components/student/DashboardHeader';
+import StatCard from '@/components/student/StatCard';
+import Card from '@/components/student/Card';
+import { fetchMe, StudentUser } from '@/lib/auth';
 
 export default function StudentDashboard() {
-  const router = useRouter();
-  const [activeItem, setActiveItem] = useState('Dashboard');
-  const [user, setUser] = useState<User | null>(null);
+  const [name, setName] = useState<string>('');
+  const [user, setUser] = useState<StudentUser | null>(null);
 
   useEffect(() => {
-    // Check if user is logged in
-    const token = localStorage.getItem('token');
-    const userData = localStorage.getItem('user');
-    
-    if (!token || !userData) {
-      router.push('/login');
-      return;
-    }
-    
-    try {
-      const parsedUser = JSON.parse(userData);
-      setUser(parsedUser);
-    } catch (error) {
-      console.error('Error parsing user data:', error);
-      router.push('/login');
-    }
-  }, [router]);
-
-  const handleSignOut = () => {
-    localStorage.removeItem('token');
-    localStorage.removeItem('user');
-    router.push('/login');
-  };
-
-  const menuItems = [
-    { name: 'Dashboard', icon: '📊' },
-    { name: 'Course Catalog', icon: '📚' },
-    { name: 'My Courses', icon: '🎓' },
-    { name: 'AI Chatbot', icon: '🤖' },
-    { name: 'Profile', icon: '👤' },
-  ];
-
-  // Show loading if user data is not loaded yet
-  if (!user) {
-    return (
-      <div className="flex h-screen items-center justify-center">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
-      </div>
-    );
-  }
+    let mounted = true;
+    fetchMe()
+      .then((res) => {
+        if (!mounted) return;
+        setUser(res.user);
+        setName(res.user.name);
+      })
+      .catch(() => {
+        if (!mounted) return;
+        setUser(null);
+        setName('');
+      });
+    return () => {
+      mounted = false;
+    };
+  }, []);
 
   return (
-    <div className="flex h-screen bg-gray-100">
-      {/* Sidebar */}
-      <div className="w-64 bg-white shadow-lg">
-        {/* Header */}
-        <div className="p-6 border-b border-gray-200">
-          <h1 className="text-xl font-bold text-gray-800">Student Portal</h1>
+    <StudentShell>
+      <div className="space-y-8">
+        <DashboardHeader name={name} />
+
+        <div className="grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-3">
+          <StatCard title="Enrolled Courses" value={<span>4</span>} icon={<GraduationCap className="h-6 w-6" />} />
+          <StatCard title="Upcoming Deadlines" value={<span>2</span>} icon={<CalendarClock className="h-6 w-6" />} />
+          <StatCard title="Achievements" value={<span>7</span>} icon={<Trophy className="h-6 w-6" />} />
         </div>
 
-        {/* Navigation Menu */}
-        <nav className="mt-6">
-          <ul className="space-y-2 px-4">
-            {menuItems.map((item) => (
-              <li key={item.name}>
-                <button
-                  onClick={() => setActiveItem(item.name)}
-                  className={`w-full flex items-center px-4 py-3 text-left rounded-lg transition-colors ${
-                    activeItem === item.name
-                      ? 'bg-blue-100 text-blue-700 border-r-4 border-blue-700'
-                      : 'text-gray-600 hover:bg-gray-100'
-                  }`}
-                >
-                  <span className="mr-3 text-lg">{item.icon}</span>
-                  <span className="font-medium">{item.name}</span>
-                </button>
-              </li>
-            ))}
-          </ul>
-        </nav>
-
-        {/* Profile Section */}
-        <div className="absolute bottom-0 w-64 p-4 border-t border-gray-200 bg-white">
-          <div className="flex items-center space-x-3">
-            <div className="w-10 h-10 bg-blue-500 rounded-full flex items-center justify-center">
-              <span className="text-white font-semibold">
-                {user.name.split(' ').map(n => n[0]).join('').toUpperCase()}
-              </span>
+        <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
+          <Card title="Next Up">
+            <div className="space-y-3 text-sm text-zinc-700">
+              <div className="flex items-center gap-2">
+                <span className="h-2 w-2 rounded-full bg-blue-600" />
+                <span>Finish “Binary Trees” lesson</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="h-2 w-2 rounded-full bg-amber-600" />
+                <span>Quiz: Web Development Fundamentals</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="h-2 w-2 rounded-full bg-violet-600" />
+                <span>Assignment: Basic Calculator</span>
+              </div>
             </div>
-            <div className="flex-1">
-              <p className="text-sm font-medium text-gray-800">{user.name}</p>
-              <button 
-                onClick={handleSignOut}
-                className="text-xs text-gray-500 hover:text-red-600 transition-colors"
+          </Card>
+
+          <Card title="Quick Actions">
+            <div className="space-y-3">
+              <Link
+                href="/course-catalog"
+                className="flex w-full items-center justify-between rounded-lg border border-zinc-200 bg-white px-4 py-3 text-left text-sm font-medium text-zinc-900 hover:bg-zinc-100"
               >
-                Sign out
-              </button>
+                <span className="flex items-center gap-2">
+                  <BookOpen className="h-4 w-4" /> Browse Course Catalog
+                </span>
+              </Link>
+              <Link
+                href="/enrolled-courses"
+                className="flex w-full items-center justify-between rounded-lg border border-zinc-200 bg-white px-4 py-3 text-left text-sm font-medium text-zinc-900 hover:bg-zinc-100"
+              >
+                <span className="flex items-center gap-2">
+                  <GraduationCap className="h-4 w-4" /> View Enrolled Courses
+                </span>
+              </Link>
+              <Link
+                href="/ai"
+                className="flex w-full items-center justify-between rounded-lg border border-zinc-200 bg-white px-4 py-3 text-left text-sm font-medium text-zinc-900 hover:bg-zinc-100"
+              >
+                <span className="flex items-center gap-2">
+                  <Bot className="h-4 w-4" /> Ask AI Chatbot
+                </span>
+              </Link>
             </div>
-          </div>
-        </div>
-      </div>
+          </Card>
 
-      {/* Main Content */}
-      <div className="flex-1 flex items-center justify-center">
-        <div className="text-center">
-          <h1 className="text-4xl font-bold text-gray-800">Student Dashboard</h1>
-          <p className="mt-4 text-gray-600">Welcome back, {user.name}!</p>
-          <p className="mt-2 text-sm text-gray-500">ID: {user.unique_identifier}</p>
+          <Card title="Profile">
+            <div className="space-y-1 text-sm text-zinc-700">
+              <div className="text-zinc-900 font-medium">{user?.name || '—'}</div>
+              <div>{user?.email || '—'}</div>
+              <div className="text-zinc-500">ID: {user?.unique_identifier || '—'}</div>
+            </div>
+          </Card>
         </div>
       </div>
-    </div>
+    </StudentShell>
   );
 }
