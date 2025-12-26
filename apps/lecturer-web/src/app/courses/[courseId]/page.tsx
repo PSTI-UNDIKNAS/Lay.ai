@@ -18,6 +18,7 @@ import {
   Plus,
   Search,
   Users,
+  X,
 } from 'lucide-react';
 import {
   LecturerCourse,
@@ -109,6 +110,12 @@ export default function CourseDetailPage() {
   const [materialsErrorByUnitId, setMaterialsErrorByUnitId] = useState<Record<string, string | null>>({});
   const [deletingDocumentId, setDeletingDocumentId] = useState<string | null>(null);
 
+  const [materialViewerOpen, setMaterialViewerOpen] = useState(false);
+  const [materialViewerUrl, setMaterialViewerUrl] = useState<string | null>(null);
+  const [materialViewerName, setMaterialViewerName] = useState('');
+  const [materialViewerLoading, setMaterialViewerLoading] = useState(false);
+  const [materialViewerError, setMaterialViewerError] = useState<string | null>(null);
+
   const [assignmentOpen, setAssignmentOpen] = useState(false);
   const [assignmentUnitId, setAssignmentUnitId] = useState<string | null>(null);
   const [editingAssignmentId, setEditingAssignmentId] = useState<string | null>(null);
@@ -193,6 +200,22 @@ export default function CourseDetailPage() {
       setMaterialsLoadingByUnitId((prev) => ({ ...prev, [unitId]: false }));
     }
   }
+
+  function closeMaterialViewer() {
+    setMaterialViewerOpen(false);
+    setMaterialViewerLoading(false);
+    setMaterialViewerError(null);
+    setMaterialViewerUrl((prev) => {
+      if (prev) URL.revokeObjectURL(prev);
+      return null;
+    });
+  }
+
+  useEffect(() => {
+    return () => {
+      if (materialViewerUrl) URL.revokeObjectURL(materialViewerUrl);
+    };
+  }, [materialViewerUrl]);
 
   async function loadAssignments(unitId: string) {
     setAssignmentsLoadingByUnitId((prev) => ({ ...prev, [unitId]: true }));
@@ -1342,6 +1365,51 @@ export default function CourseDetailPage() {
           </div>
         )}
 
+        {materialViewerOpen && (
+          <div className="fixed inset-0 z-50">
+            <div
+              className="absolute inset-0 bg-black/50"
+              onClick={() => {
+                closeMaterialViewer();
+              }}
+            />
+            <div className="absolute inset-0 flex items-center justify-center p-4">
+              <Card
+                title={materialViewerName || 'Material'}
+                className="w-full max-w-5xl"
+                bodyClassName="p-0"
+                headerRight={
+                  <Button variant="outline" onClick={closeMaterialViewer}>
+                    <X className="h-4 w-4" />
+                  </Button>
+                }
+              >
+                <div className="h-[75vh] w-full bg-zinc-50">
+                  {materialViewerError && (
+                    <div className="p-5">
+                      <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+                        {materialViewerError}
+                      </div>
+                    </div>
+                  )}
+
+                  {materialViewerLoading && !materialViewerError && (
+                    <div className="p-5 text-sm text-zinc-600">Loading material...</div>
+                  )}
+
+                  {!materialViewerLoading && !materialViewerError && materialViewerUrl && (
+                    <iframe
+                      title={materialViewerName || 'Material'}
+                      src={materialViewerUrl}
+                      className="h-full w-full"
+                    />
+                  )}
+                </div>
+              </Card>
+            </div>
+          </div>
+        )}
+
         {isEditMode && assignmentOpen && (
           <div className="fixed inset-0 z-50">
             <div
@@ -1928,19 +1996,29 @@ export default function CourseDetailPage() {
                                     variant="outline"
                                     onClick={() => {
                                       setMaterialsErrorByUnitId((prev) => ({ ...prev, [unit.id]: null }));
+                                      setMaterialViewerOpen(true);
+                                      setMaterialViewerLoading(true);
+                                      setMaterialViewerError(null);
+                                      setMaterialViewerName(doc.file_name || 'Material');
+                                      setMaterialViewerUrl((prev) => {
+                                        if (prev) URL.revokeObjectURL(prev);
+                                        return null;
+                                      });
                                       downloadDocumentPDF(doc.id)
                                         .then((blob) => {
                                           const blobUrl = URL.createObjectURL(blob);
-                                          window.open(blobUrl, '_blank', 'noopener,noreferrer');
-                                          window.setTimeout(() => URL.revokeObjectURL(blobUrl), 60_000);
+                                          setMaterialViewerUrl(blobUrl);
                                         })
                                         .catch((err: unknown) => {
+                                          const message =
+                                            err instanceof Error ? err.message : 'Failed to open document';
                                           setMaterialsErrorByUnitId((prev) => ({
                                             ...prev,
-                                            [unit.id]:
-                                              err instanceof Error ? err.message : 'Failed to open document',
+                                            [unit.id]: message,
                                           }));
-                                        });
+                                          setMaterialViewerError(message);
+                                        })
+                                        .finally(() => setMaterialViewerLoading(false));
                                     }}
                                   >
                                     View
