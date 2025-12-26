@@ -46,6 +46,10 @@ export default function StudentCourseDetailPage() {
   const [submittedAssignmentsLoadingByUnitId, setSubmittedAssignmentsLoadingByUnitId] = useState<Record<string, boolean>>({});
   const [submittedAssignmentsErrorByUnitId, setSubmittedAssignmentsErrorByUnitId] = useState<Record<string, string | null>>({});
 
+  const [submittedQuizzesByUnitId, setSubmittedQuizzesByUnitId] = useState<Record<string, Record<string, string>>>({});
+  const [submittedQuizzesLoadingByUnitId, setSubmittedQuizzesLoadingByUnitId] = useState<Record<string, boolean>>({});
+  const [submittedQuizzesErrorByUnitId, setSubmittedQuizzesErrorByUnitId] = useState<Record<string, string | null>>({});
+
   const [quizzesByUnitId, setQuizzesByUnitId] = useState<Record<string, Quiz[]>>({});
   const [quizzesLoadingByUnitId, setQuizzesLoadingByUnitId] = useState<Record<string, boolean>>({});
   const [quizzesErrorByUnitId, setQuizzesErrorByUnitId] = useState<Record<string, string | null>>({});
@@ -223,6 +227,7 @@ export default function StudentCourseDetailPage() {
           },
         };
       });
+      void loadSubmittedQuizzes(unitId);
       return list;
     } catch (err) {
       setQuizzesErrorByUnitId((prev) => ({
@@ -232,6 +237,46 @@ export default function StudentCourseDetailPage() {
       return null;
     } finally {
       setQuizzesLoadingByUnitId((prev) => ({ ...prev, [unitId]: false }));
+    }
+  }
+
+  async function loadSubmittedQuizzes(unitId: string) {
+    const token = getStoredToken();
+    if (!token) return null;
+    if (submittedQuizzesLoadingByUnitId[unitId]) return null;
+    setSubmittedQuizzesLoadingByUnitId((prev) => ({ ...prev, [unitId]: true }));
+    setSubmittedQuizzesErrorByUnitId((prev) => ({ ...prev, [unitId]: null }));
+    try {
+      const res = await fetch(`/api/progress/units/${unitId}/quizzes/submissions/me`, {
+        method: 'GET',
+        headers: {
+          Accept: 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+      });
+      const data = (await res.json().catch(() => ({}))) as {
+        attempts?: Array<{ quiz_id: string; created_at: string }>;
+        error?: string;
+        message?: string;
+      };
+      if (!res.ok) {
+        throw new Error(data?.error || data?.message || 'Failed to load quiz status');
+      }
+      const map: Record<string, string> = {};
+      for (const a of Array.isArray(data?.attempts) ? data.attempts : []) {
+        if (!a?.quiz_id) continue;
+        map[a.quiz_id] = a.created_at;
+      }
+      setSubmittedQuizzesByUnitId((prev) => ({ ...prev, [unitId]: map }));
+      return map;
+    } catch (err) {
+      setSubmittedQuizzesErrorByUnitId((prev) => ({
+        ...prev,
+        [unitId]: err instanceof Error ? err.message : 'Failed to load quiz status',
+      }));
+      return null;
+    } finally {
+      setSubmittedQuizzesLoadingByUnitId((prev) => ({ ...prev, [unitId]: false }));
     }
   }
 
@@ -430,6 +475,15 @@ export default function StudentCourseDetailPage() {
     if (quizzesLoadingByUnitId[openUnitId]) return;
     void loadQuizzes(openUnitId);
   }, [activeTab, openUnitId, quizzesByUnitId, quizzesLoadingByUnitId]);
+
+  useEffect(() => {
+    if (!openUnitId) return;
+    if (activeTab !== 'quizzes') return;
+    if (!quizzesByUnitId[openUnitId]) return;
+    if (submittedQuizzesByUnitId[openUnitId]) return;
+    if (submittedQuizzesLoadingByUnitId[openUnitId]) return;
+    void loadSubmittedQuizzes(openUnitId);
+  }, [activeTab, openUnitId, quizzesByUnitId, submittedQuizzesByUnitId, submittedQuizzesLoadingByUnitId]);
 
   const filteredUnits = useMemo(() => {
     const q = unitQuery.trim().toLowerCase();
@@ -752,6 +806,12 @@ export default function StudentCourseDetailPage() {
                             </div>
                           )}
 
+                          {submittedQuizzesErrorByUnitId[unit.id] && (
+                            <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+                              {submittedQuizzesErrorByUnitId[unit.id]}
+                            </div>
+                          )}
+
                           {quizzesLoadingByUnitId[unit.id] && !quizzesByUnitId[unit.id] && (
                             <div className="rounded-xl border border-zinc-200 bg-white px-4 py-8 text-center text-sm text-zinc-600">
                               Loading quizzes...
@@ -767,6 +827,27 @@ export default function StudentCourseDetailPage() {
                                     <div className="text-xs text-zinc-500">
                                       Updated {new Date(q.updated_at).toLocaleString()}
                                     </div>
+                                  </div>
+                                  <div className="flex items-center gap-2">
+                                    {submittedQuizzesByUnitId[unit.id]?.[q.id] ? (
+                                      <span className="rounded-full border border-emerald-200 bg-emerald-50 px-2 py-1 text-xs font-medium text-emerald-700">
+                                        Done
+                                      </span>
+                                    ) : (
+                                      <span className="rounded-full border border-zinc-200 bg-zinc-50 px-2 py-1 text-xs font-medium text-zinc-700">
+                                        Not done
+                                      </span>
+                                    )}
+                                    <button
+                                      type="button"
+                                      className="inline-flex items-center justify-center rounded-md bg-zinc-900 px-3 py-2 text-sm font-medium text-white hover:bg-zinc-800"
+                                      onClick={() => {
+                                        if (!courseId) return;
+                                        router.push(`/courses/${courseId}/units/${unit.id}/quizzes/${q.id}`);
+                                      }}
+                                    >
+                                      Take quiz
+                                    </button>
                                   </div>
                                 </div>
                               ))}
