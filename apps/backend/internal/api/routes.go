@@ -235,7 +235,6 @@ func SetupRoutes(db *pgxpool.Pool) *gin.Engine {
 
 			conversations := ai.Group("/conversations")
 			conversations.Use(middleware.AuthWithStatusMiddleware(authService))
-			conversations.Use(middleware.LecturerOnlyMiddleware(authService))
 			{
 				conversations.GET("", aiConversationHandler.ListConversations)
 				conversations.POST("", aiConversationHandler.CreateConversation)
