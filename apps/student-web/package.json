@@ -15,7 +15,10 @@
     "@layai/types": "workspace:*",
     "@layai/utils": "workspace:*",
     "@layai/store": "workspace:*",
-    "@layai/ui": "workspace:*"
+    "@layai/ui": "workspace:*",
+    "clsx": "^2.1.1",
+    "lucide-react": "^0.560.0",
+    "tailwind-merge": "^3.4.0"
   },
   "devDependencies": {
     "babel-plugin-react-compiler": "1.0.0",
