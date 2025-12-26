@@ -73,6 +73,7 @@ func SetupRoutes(db *pgxpool.Pool) *gin.Engine {
 		quizService,
 		submissionService,
 		enrollmentStore,
+		aiService,
 	)
 	enrollmentHandler := handlers.NewEnrollmentHandler(enrollmentService)
 	aiHandler := handlers.NewAIHandler(aiService)
@@ -195,6 +196,10 @@ func SetupRoutes(db *pgxpool.Pool) *gin.Engine {
 		{
 			progress.GET("/courses/:courseId/me", middleware.EnrollmentRequiredMiddleware(enrollmentStore), progressHandler.GetStudentProgress)
 			progress.POST("/units/:unitId/complete", progressHandler.CompleteUnit)
+			progress.GET("/units/:unitId/assignments/submissions/me", progressHandler.GetMyAssignmentSubmissionsByUnit)
+			progress.POST("/assignments/:assignmentId/upload-url", progressHandler.GenerateAssignmentUploadURL)
+			progress.POST("/assignments/:assignmentId/upload", progressHandler.UploadAssignmentPDF)
+			progress.GET("/assignments/:assignmentId/submission/me", progressHandler.GetMyAssignmentSubmission)
 			progress.POST("/assignments/:assignmentId/submit", progressHandler.SubmitAssignment)
 			progress.POST("/quizzes/:quizId/submit", progressHandler.SubmitQuiz)
 		}

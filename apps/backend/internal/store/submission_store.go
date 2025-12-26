@@ -153,6 +153,43 @@ func (s *SubmissionStore) GetSubmissions(assignmentID, studentID *string, limit,
 	return submissions, nil
 }
 
+func (s *SubmissionStore) GetSubmissionsByStudentAndUnit(studentID, unitID string) ([]*models.Submission, error) {
+	query := `
+		SELECT s.id, s.assignment_id, s.student_id, s.file_path, s.grade, s.feedback, s.created_at, s.updated_at
+		FROM submissions s
+		JOIN assignments a ON a.id = s.assignment_id
+		WHERE s.student_id = $1 AND a.learning_unit_id = $2
+		ORDER BY s.created_at DESC
+	`
+
+	rows, err := s.db.Query(context.Background(), query, studentID, unitID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get submissions: %w", err)
+	}
+	defer rows.Close()
+
+	var submissions []*models.Submission
+	for rows.Next() {
+		var submission models.Submission
+		err := rows.Scan(
+			&submission.ID,
+			&submission.AssignmentID,
+			&submission.StudentID,
+			&submission.FilePath,
+			&submission.Grade,
+			&submission.Feedback,
+			&submission.CreatedAt,
+			&submission.UpdatedAt,
+		)
+		if err != nil {
+			return nil, fmt.Errorf("failed to scan submission: %w", err)
+		}
+		submissions = append(submissions, &submission)
+	}
+
+	return submissions, nil
+}
+
 // UpdateSubmission updates a submission in the database
 func (s *SubmissionStore) UpdateSubmission(submissionID string, updates map[string]interface{}) (*models.Submission, error) {
 	if len(updates) == 0 {

@@ -2,6 +2,8 @@ package handlers
 
 import (
 	"net/http"
+	"path/filepath"
+	"strings"
 
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
@@ -18,6 +20,7 @@ type ProgressHandler struct {
 	quizService         *services.QuizService
 	submissionService   *services.SubmissionService
 	enrollmentStore     *store.EnrollmentStore
+	aiService           *services.AIService
 }
 
 func NewProgressHandler(
@@ -27,6 +30,7 @@ func NewProgressHandler(
 	quizService *services.QuizService,
 	submissionService *services.SubmissionService,
 	enrollmentStore *store.EnrollmentStore,
+	aiService *services.AIService,
 ) *ProgressHandler {
 	return &ProgressHandler{
 		courseService:       courseService,
@@ -35,7 +39,305 @@ func NewProgressHandler(
 		quizService:         quizService,
 		submissionService:   submissionService,
 		enrollmentStore:     enrollmentStore,
+		aiService:           aiService,
 	}
+}
+
+type GenerateAssignmentUploadURLRequest struct {
+	FileName string `json:"fileName" binding:"required"`
+}
+
+type GenerateAssignmentUploadURLResponse struct {
+	UploadURL   string `json:"uploadUrl"`
+	NewFileName string `json:"newFileName"`
+}
+
+func (h *ProgressHandler) GenerateAssignmentUploadURL(c *gin.Context) {
+	userIDVal, exists := c.Get("user_id")
+	if !exists {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "User not authenticated"})
+		return
+	}
+
+	userIDStr, ok := userIDVal.(string)
+	if !ok {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "User not authenticated"})
+		return
+	}
+
+	userID, err := uuid.Parse(userIDStr)
+	if err != nil {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "User not authenticated"})
+		return
+	}
+
+	assignmentIDStr := c.Param("assignmentId")
+	assignmentID, err := uuid.Parse(assignmentIDStr)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid assignment ID"})
+		return
+	}
+
+	var req GenerateAssignmentUploadURLRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request body", "details": err.Error()})
+		return
+	}
+
+	if strings.ToLower(filepath.Ext(req.FileName)) != ".pdf" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Only pdf file are accepted"})
+		return
+	}
+
+	assignment, err := h.assignmentService.GetAssignmentByID(assignmentID.String())
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "Assignment not found"})
+		return
+	}
+
+	unit, err := h.learningUnitService.GetLearningUnitByID(assignment.LearningUnitID.String())
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "Learning unit not found"})
+		return
+	}
+
+	enrollment, err := h.enrollmentStore.GetEnrollmentByStudentAndCourse(userID.String(), unit.CourseID.String())
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to verify enrollment"})
+		return
+	}
+	if enrollment == nil || enrollment.Status != models.EnrollmentStatusEnrolled {
+		c.JSON(http.StatusForbidden, gin.H{"error": "Enrollment required"})
+		return
+	}
+
+	uploadURL, newFileName, err := h.aiService.GeneratePresignedUploadURL(c.Request.Context(), req.FileName)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, GenerateAssignmentUploadURLResponse{
+		UploadURL:   uploadURL,
+		NewFileName: newFileName,
+	})
+}
+
+type UploadAssignmentPDFResponse struct {
+	NewFileName string `json:"newFileName"`
+}
+
+func (h *ProgressHandler) UploadAssignmentPDF(c *gin.Context) {
+	userIDVal, exists := c.Get("user_id")
+	if !exists {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "User not authenticated"})
+		return
+	}
+
+	userIDStr, ok := userIDVal.(string)
+	if !ok {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "User not authenticated"})
+		return
+	}
+
+	userID, err := uuid.Parse(userIDStr)
+	if err != nil {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "User not authenticated"})
+		return
+	}
+
+	assignmentIDStr := c.Param("assignmentId")
+	assignmentID, err := uuid.Parse(assignmentIDStr)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid assignment ID"})
+		return
+	}
+
+	fileHeader, err := c.FormFile("file")
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "file is required"})
+		return
+	}
+
+	if strings.ToLower(filepath.Ext(fileHeader.Filename)) != ".pdf" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Only pdf file are accepted"})
+		return
+	}
+
+	assignment, err := h.assignmentService.GetAssignmentByID(assignmentID.String())
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "Assignment not found"})
+		return
+	}
+
+	unit, err := h.learningUnitService.GetLearningUnitByID(assignment.LearningUnitID.String())
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "Learning unit not found"})
+		return
+	}
+
+	enrollment, err := h.enrollmentStore.GetEnrollmentByStudentAndCourse(userID.String(), unit.CourseID.String())
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to verify enrollment"})
+		return
+	}
+	if enrollment == nil || enrollment.Status != models.EnrollmentStatusEnrolled {
+		c.JSON(http.StatusForbidden, gin.H{"error": "Enrollment required"})
+		return
+	}
+
+	assignmentIDParam := assignmentID.String()
+	studentIDParam := userID.String()
+	existing, err := h.submissionService.GetSubmissions(&assignmentIDParam, &studentIDParam, 1, 0)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to fetch existing submissions"})
+		return
+	}
+	if len(existing) > 0 {
+		c.JSON(http.StatusConflict, gin.H{"error": "Assignment already submitted"})
+		return
+	}
+
+	f, err := fileHeader.Open()
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to open uploaded file"})
+		return
+	}
+	defer f.Close()
+
+	newFileName, err := h.aiService.UploadPDFToR2(c.Request.Context(), fileHeader.Filename, f)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, UploadAssignmentPDFResponse{NewFileName: newFileName})
+}
+
+func (h *ProgressHandler) GetMyAssignmentSubmission(c *gin.Context) {
+	userIDVal, exists := c.Get("user_id")
+	if !exists {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "User not authenticated"})
+		return
+	}
+
+	userIDStr, ok := userIDVal.(string)
+	if !ok {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "User not authenticated"})
+		return
+	}
+
+	userID, err := uuid.Parse(userIDStr)
+	if err != nil {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "User not authenticated"})
+		return
+	}
+
+	assignmentIDStr := c.Param("assignmentId")
+	assignmentID, err := uuid.Parse(assignmentIDStr)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid assignment ID"})
+		return
+	}
+
+	assignment, err := h.assignmentService.GetAssignmentByID(assignmentID.String())
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "Assignment not found"})
+		return
+	}
+
+	unit, err := h.learningUnitService.GetLearningUnitByID(assignment.LearningUnitID.String())
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "Learning unit not found"})
+		return
+	}
+
+	enrollment, err := h.enrollmentStore.GetEnrollmentByStudentAndCourse(userID.String(), unit.CourseID.String())
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to verify enrollment"})
+		return
+	}
+	if enrollment == nil || enrollment.Status != models.EnrollmentStatusEnrolled {
+		c.JSON(http.StatusForbidden, gin.H{"error": "Enrollment required"})
+		return
+	}
+
+	assignmentIDParam := assignmentID.String()
+	studentIDParam := userID.String()
+	list, err := h.submissionService.GetSubmissions(&assignmentIDParam, &studentIDParam, 1, 0)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to fetch submission"})
+		return
+	}
+	if len(list) == 0 {
+		c.JSON(http.StatusOK, gin.H{"submitted": false})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"submitted":  true,
+		"submission": list[0],
+	})
+}
+
+func (h *ProgressHandler) GetMyAssignmentSubmissionsByUnit(c *gin.Context) {
+	userIDVal, exists := c.Get("user_id")
+	if !exists {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "User not authenticated"})
+		return
+	}
+
+	userIDStr, ok := userIDVal.(string)
+	if !ok {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "User not authenticated"})
+		return
+	}
+
+	userID, err := uuid.Parse(userIDStr)
+	if err != nil {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "User not authenticated"})
+		return
+	}
+
+	unitIDStr := c.Param("unitId")
+	unitID, err := uuid.Parse(unitIDStr)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid unit ID"})
+		return
+	}
+
+	unit, err := h.learningUnitService.GetLearningUnitByID(unitID.String())
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "Learning unit not found"})
+		return
+	}
+
+	enrollment, err := h.enrollmentStore.GetEnrollmentByStudentAndCourse(userID.String(), unit.CourseID.String())
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to verify enrollment"})
+		return
+	}
+	if enrollment == nil || enrollment.Status != models.EnrollmentStatusEnrolled {
+		c.JSON(http.StatusForbidden, gin.H{"error": "Enrollment required"})
+		return
+	}
+
+	submissions, err := h.submissionService.GetSubmissionsByStudentAndUnit(userID.String(), unitID.String())
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to fetch submissions"})
+		return
+	}
+
+	ids := make([]string, 0, len(submissions))
+	for _, s := range submissions {
+		ids = append(ids, s.AssignmentID.String())
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"unit_id":                  unitID.String(),
+		"submitted_assignment_ids": ids,
+		"submissions":              submissions,
+	})
 }
 
 // GetStudentProgress handles GET /api/progress/courses/{courseId}/me - Enrolled students only
@@ -106,8 +408,20 @@ func (h *ProgressHandler) CompleteUnit(c *gin.Context) {
 // SubmitAssignment handles POST /api/progress/assignments/{assignmentId}/submit - Enrolled students only
 func (h *ProgressHandler) SubmitAssignment(c *gin.Context) {
 	// Get user from context
-	userID, exists := c.Get("user_id")
+	userIDVal, exists := c.Get("user_id")
 	if !exists {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "User not authenticated"})
+		return
+	}
+
+	userIDStr, ok := userIDVal.(string)
+	if !ok {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "User not authenticated"})
+		return
+	}
+
+	userID, err := uuid.Parse(userIDStr)
+	if err != nil {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "User not authenticated"})
 		return
 	}
@@ -121,24 +435,61 @@ func (h *ProgressHandler) SubmitAssignment(c *gin.Context) {
 	}
 
 	// Parse request body
-	var req struct {
-		Content     string   `json:"content" binding:"required"`
-		Attachments []string `json:"attachments"`
-	}
+	var req models.CreateSubmissionRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid request body"})
 		return
 	}
 
-	// TODO: Verify user is enrolled in the course that contains this assignment
-	// TODO: Create submission using submission service
+	if strings.ToLower(filepath.Ext(req.FilePath)) != ".pdf" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Only pdf file are accepted"})
+		return
+	}
 
-	// For now, return a success response
+	assignment, err := h.assignmentService.GetAssignmentByID(assignmentID.String())
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "Assignment not found"})
+		return
+	}
+
+	unit, err := h.learningUnitService.GetLearningUnitByID(assignment.LearningUnitID.String())
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "Learning unit not found"})
+		return
+	}
+
+	enrollment, err := h.enrollmentStore.GetEnrollmentByStudentAndCourse(userID.String(), unit.CourseID.String())
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to verify enrollment"})
+		return
+	}
+	if enrollment == nil || enrollment.Status != models.EnrollmentStatusEnrolled {
+		c.JSON(http.StatusForbidden, gin.H{"error": "Enrollment required"})
+		return
+	}
+
+	assignmentIDParam := assignmentID.String()
+	studentIDParam := userID.String()
+	existing, err := h.submissionService.GetSubmissions(&assignmentIDParam, &studentIDParam, 1, 0)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to fetch existing submissions"})
+		return
+	}
+
+	if len(existing) > 0 {
+		c.JSON(http.StatusConflict, gin.H{"error": "Assignment already submitted"})
+		return
+	}
+
+	submission, err := h.submissionService.CreateSubmission(assignmentID.String(), userID.String(), req.FilePath)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
 	c.JSON(http.StatusCreated, gin.H{
-		"message":       "Assignment submitted successfully",
-		"assignment_id": assignmentID,
-		"student_id":    userID,
-		"submitted_at":  "2024-01-01T00:00:00Z", // Placeholder timestamp
+		"message":    "Assignment submitted successfully",
+		"submission": submission,
 	})
 }
 

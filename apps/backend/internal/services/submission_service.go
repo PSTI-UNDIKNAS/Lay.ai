@@ -63,6 +63,17 @@ func (s *SubmissionService) GetSubmissions(assignmentID, studentID *string, limi
 	return s.submissionStore.GetSubmissions(assignmentID, studentID, limit, offset)
 }
 
+func (s *SubmissionService) GetSubmissionsByStudentAndUnit(studentID, unitID string) ([]*models.Submission, error) {
+	if studentID == "" {
+		return nil, fmt.Errorf("student ID is required")
+	}
+	if unitID == "" {
+		return nil, fmt.Errorf("learning unit ID is required")
+	}
+
+	return s.submissionStore.GetSubmissionsByStudentAndUnit(studentID, unitID)
+}
+
 // UpdateSubmission handles submission update business logic (for grading)
 func (s *SubmissionService) UpdateSubmission(submissionID string, updates map[string]interface{}) (*models.Submission, error) {
 	if submissionID == "" {
