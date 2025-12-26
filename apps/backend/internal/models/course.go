@@ -26,30 +26,35 @@ const (
 
 // Course represents a course in the system
 type Course struct {
-	ID           uuid.UUID  `json:"id" db:"id"`
-	CreatorID    uuid.UUID  `json:"creator_id" db:"creator_id"`
-	Title        string     `json:"title" db:"title"`
-	Description  string     `json:"description" db:"description"`
-	AccessType   AccessType `json:"access_type" db:"access_type"`
-	PasswordHash string     `json:"-" db:"password_hash"` // "-" means don't include in JSON responses
-	CreatedAt    time.Time  `json:"created_at" db:"created_at"`
-	UpdatedAt    time.Time  `json:"updated_at" db:"updated_at"`
+	ID             uuid.UUID  `json:"id" db:"id"`
+	CreatorID      uuid.UUID  `json:"creator_id" db:"creator_id"`
+	CreatorName    string     `json:"creator_name,omitempty" db:"creator_name"`
+	Title          string     `json:"title" db:"title"`
+	Description    string     `json:"description" db:"description"`
+	AccessType     AccessType `json:"access_type" db:"access_type"`
+	StudentCount   int        `json:"student_count,omitempty" db:"student_count"`
+	EstimatedHours int        `json:"estimated_hours" db:"estimated_hours"`
+	PasswordHash   string     `json:"-" db:"password_hash"` // "-" means don't include in JSON responses
+	CreatedAt      time.Time  `json:"created_at" db:"created_at"`
+	UpdatedAt      time.Time  `json:"updated_at" db:"updated_at"`
 }
 
 // CreateCourseRequest represents the request payload for creating a course
 type CreateCourseRequest struct {
-	Title       string     `json:"title" binding:"required"`
-	Description string     `json:"description"`
-	AccessType  AccessType `json:"access_type" binding:"required,oneof=public password by_request"`
-	Password    string     `json:"password"` // Only required if access_type is "password"
+	Title          string     `json:"title" binding:"required"`
+	Description    string     `json:"description"`
+	AccessType     AccessType `json:"access_type" binding:"required,oneof=public password by_request"`
+	EstimatedHours int        `json:"estimated_hours" binding:"required"`
+	Password       string     `json:"password"` // Only required if access_type is "password"
 }
 
 // UpdateCourseRequest represents the request payload for updating a course
 type UpdateCourseRequest struct {
-	Title       string     `json:"title"`
-	Description string     `json:"description"`
-	AccessType  AccessType `json:"access_type" binding:"omitempty,oneof=public password by_request"`
-	Password    string     `json:"password"` // Only used if access_type is "password"
+	Title          string     `json:"title"`
+	Description    string     `json:"description"`
+	AccessType     AccessType `json:"access_type" binding:"omitempty,oneof=public password by_request"`
+	EstimatedHours *int       `json:"estimated_hours"`
+	Password       string     `json:"password"` // Only used if access_type is "password"
 }
 
 // CourseResponse represents the response for course operations

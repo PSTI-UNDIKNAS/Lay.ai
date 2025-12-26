@@ -27,8 +27,8 @@ func NewCourseStore(db *pgxpool.Pool) *CourseStore {
 // CreateCourse saves a new course to the database
 func (s *CourseStore) CreateCourse(course *models.Course) (*models.Course, error) {
 	query := `
-		INSERT INTO courses (creator_id, title, description, access_type, password_hash, created_at, updated_at)
-		VALUES ($1, $2, $3, $4, $5, $6, $7)
+		INSERT INTO courses (creator_id, title, description, access_type, estimated_hours, password_hash, created_at, updated_at)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
 		RETURNING id, created_at, updated_at
 	`
 
@@ -43,6 +43,7 @@ func (s *CourseStore) CreateCourse(course *models.Course) (*models.Course, error
 		course.Title,
 		course.Description,
 		course.AccessType,
+		course.EstimatedHours,
 		course.PasswordHash,
 		course.CreatedAt,
 		course.UpdatedAt,
@@ -59,9 +60,25 @@ func (s *CourseStore) CreateCourse(course *models.Course) (*models.Course, error
 // GetCourseByID retrieves a course by its ID
 func (s *CourseStore) GetCourseByID(courseID string) (*models.Course, error) {
 	query := `
-		SELECT id, creator_id, title, description, access_type, password_hash, created_at, updated_at
-		FROM courses
-		WHERE id = $1
+		SELECT
+			c.id,
+			c.creator_id,
+			u.name,
+			c.title,
+			c.description,
+			c.access_type,
+			c.estimated_hours,
+			(
+				SELECT COUNT(*)
+				FROM enrollments e
+				WHERE e.course_id = c.id AND e.status = 'enrolled'
+			) AS student_count,
+			c.password_hash,
+			c.created_at,
+			c.updated_at
+		FROM courses c
+		JOIN users u ON u.id = c.creator_id
+		WHERE c.id = $1
 	`
 
 	var course models.Course
@@ -70,9 +87,12 @@ func (s *CourseStore) GetCourseByID(courseID string) (*models.Course, error) {
 	err := row.Scan(
 		&course.ID,
 		&course.CreatorID,
+		&course.CreatorName,
 		&course.Title,
 		&course.Description,
 		&course.AccessType,
+		&course.EstimatedHours,
+		&course.StudentCount,
 		&course.PasswordHash,
 		&course.CreatedAt,
 		&course.UpdatedAt,
@@ -95,12 +115,28 @@ func (s *CourseStore) GetCourses(creatorID *string, limit, offset int) ([]*model
 	argIndex := 1
 
 	query.WriteString(`
-		SELECT id, creator_id, title, description, access_type, password_hash, created_at, updated_at
-		FROM courses
+		SELECT
+			c.id,
+			c.creator_id,
+			u.name,
+			c.title,
+			c.description,
+			c.access_type,
+			c.estimated_hours,
+			(
+				SELECT COUNT(*)
+				FROM enrollments e
+				WHERE e.course_id = c.id AND e.status = 'enrolled'
+			) AS student_count,
+			c.password_hash,
+			c.created_at,
+			c.updated_at
+		FROM courses c
+		JOIN users u ON u.id = c.creator_id
 	`)
 
 	if creatorID != nil {
-		query.WriteString(fmt.Sprintf(" WHERE creator_id = $%d", argIndex))
+		query.WriteString(fmt.Sprintf(" WHERE c.creator_id = $%d", argIndex))
 		args = append(args, *creatorID)
 		argIndex++
 	}
@@ -130,9 +166,12 @@ func (s *CourseStore) GetCourses(creatorID *string, limit, offset int) ([]*model
 		err := rows.Scan(
 			&course.ID,
 			&course.CreatorID,
+			&course.CreatorName,
 			&course.Title,
 			&course.Description,
 			&course.AccessType,
+			&course.EstimatedHours,
+			&course.StudentCount,
 			&course.PasswordHash,
 			&course.CreatedAt,
 			&course.UpdatedAt,
@@ -174,7 +213,7 @@ func (s *CourseStore) UpdateCourse(courseID string, updates map[string]interface
 		UPDATE courses
 		SET %s
 		WHERE id = $%d
-		RETURNING id, creator_id, title, description, access_type, password_hash, created_at, updated_at
+		RETURNING id, creator_id, title, description, access_type, estimated_hours, password_hash, created_at, updated_at
 	`, strings.Join(setParts, ", "), argIndex)
 
 	var course models.Course
@@ -186,6 +225,7 @@ func (s *CourseStore) UpdateCourse(courseID string, updates map[string]interface
 		&course.Title,
 		&course.Description,
 		&course.AccessType,
+		&course.EstimatedHours,
 		&course.PasswordHash,
 		&course.CreatedAt,
 		&course.UpdatedAt,

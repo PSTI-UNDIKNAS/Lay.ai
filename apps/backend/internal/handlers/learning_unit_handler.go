@@ -449,11 +449,28 @@ func (h *LearningUnitHandler) DeleteAssignment(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"success": true})
 }
 
-// GetAssignments handles GET /api/learning-units/{unitId}/assignments - Lecturer only
+// GetAssignments handles GET /api/learning-units/{unitId}/assignments
 func (h *LearningUnitHandler) GetAssignments(c *gin.Context) {
-	_, exists := c.Get("user_id")
+	userIDValue, exists := c.Get("user_id")
 	if !exists {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "User not authenticated"})
+		return
+	}
+
+	userIDStr, ok := userIDValue.(string)
+	if !ok {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "User not authenticated"})
+		return
+	}
+
+	roleValue, ok := c.Get("user_role")
+	if !ok {
+		c.JSON(http.StatusForbidden, gin.H{"error": "Access denied"})
+		return
+	}
+	roleStr, ok := roleValue.(string)
+	if !ok {
+		c.JSON(http.StatusForbidden, gin.H{"error": "Access denied"})
 		return
 	}
 
@@ -464,9 +481,40 @@ func (h *LearningUnitHandler) GetAssignments(c *gin.Context) {
 		return
 	}
 
-	_, err = h.learningUnitService.GetLearningUnitByID(unitID.String())
+	unit, err := h.learningUnitService.GetLearningUnitByID(unitID.String())
 	if err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"error": "Learning unit not found"})
+		return
+	}
+
+	course, err := h.courseService.GetCourseByID(unit.CourseID.String())
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "Course not found"})
+		return
+	}
+
+	if roleStr == string(models.RoleLecturer) {
+		lecturerID, err := uuid.Parse(userIDStr)
+		if err != nil {
+			c.JSON(http.StatusUnauthorized, gin.H{"error": "User not authenticated"})
+			return
+		}
+		if course.CreatorID != lecturerID {
+			c.JSON(http.StatusForbidden, gin.H{"error": "Access denied"})
+			return
+		}
+	} else if roleStr == string(models.RoleStudent) {
+		enrollment, err := h.enrollmentStore.GetEnrollmentByStudentAndCourse(userIDStr, course.ID.String())
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to verify enrollment"})
+			return
+		}
+		if enrollment == nil || enrollment.Status != models.EnrollmentStatusEnrolled {
+			c.JSON(http.StatusForbidden, gin.H{"error": "You must be enrolled in this course to access this resource"})
+			return
+		}
+	} else {
+		c.JSON(http.StatusForbidden, gin.H{"error": "Access denied"})
 		return
 	}
 
@@ -589,6 +637,23 @@ func (h *LearningUnitHandler) GetQuizzes(c *gin.Context) {
 		return
 	}
 
+	userIDStr, ok := userIDValue.(string)
+	if !ok {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "User not authenticated"})
+		return
+	}
+
+	roleValue, ok := c.Get("user_role")
+	if !ok {
+		c.JSON(http.StatusForbidden, gin.H{"error": "Access denied"})
+		return
+	}
+	roleStr, ok := roleValue.(string)
+	if !ok {
+		c.JSON(http.StatusForbidden, gin.H{"error": "Access denied"})
+		return
+	}
+
 	unitIDStr := c.Param("unitId")
 	unitID, err := uuid.Parse(unitIDStr)
 	if err != nil {
@@ -608,18 +673,27 @@ func (h *LearningUnitHandler) GetQuizzes(c *gin.Context) {
 		return
 	}
 
-	userIDStr, ok := userIDValue.(string)
-	if !ok {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "User not authenticated"})
-		return
-	}
-
-	lecturerID, err := uuid.Parse(userIDStr)
-	if err != nil {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "User not authenticated"})
-		return
-	}
-	if course.CreatorID != lecturerID {
+	if roleStr == string(models.RoleLecturer) {
+		lecturerID, err := uuid.Parse(userIDStr)
+		if err != nil {
+			c.JSON(http.StatusUnauthorized, gin.H{"error": "User not authenticated"})
+			return
+		}
+		if course.CreatorID != lecturerID {
+			c.JSON(http.StatusForbidden, gin.H{"error": "Access denied"})
+			return
+		}
+	} else if roleStr == string(models.RoleStudent) {
+		enrollment, err := h.enrollmentStore.GetEnrollmentByStudentAndCourse(userIDStr, course.ID.String())
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to verify enrollment"})
+			return
+		}
+		if enrollment == nil || enrollment.Status != models.EnrollmentStatusEnrolled {
+			c.JSON(http.StatusForbidden, gin.H{"error": "You must be enrolled in this course to access this resource"})
+			return
+		}
+	} else {
 		c.JSON(http.StatusForbidden, gin.H{"error": "Access denied"})
 		return
 	}
@@ -655,6 +729,183 @@ func (h *LearningUnitHandler) GetQuizzes(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, resp)
+}
+
+func (h *LearningUnitHandler) GetMaterials(c *gin.Context) {
+	userIDValue, exists := c.Get("user_id")
+	if !exists {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "User not authenticated"})
+		return
+	}
+
+	userIDStr, ok := userIDValue.(string)
+	if !ok {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "User not authenticated"})
+		return
+	}
+
+	roleValue, ok := c.Get("user_role")
+	if !ok {
+		c.JSON(http.StatusForbidden, gin.H{"error": "Access denied"})
+		return
+	}
+	roleStr, ok := roleValue.(string)
+	if !ok {
+		c.JSON(http.StatusForbidden, gin.H{"error": "Access denied"})
+		return
+	}
+
+	unitIDStr := c.Param("unitId")
+	unitID, err := uuid.Parse(unitIDStr)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid unit ID"})
+		return
+	}
+
+	unit, err := h.learningUnitService.GetLearningUnitByID(unitID.String())
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "Learning unit not found"})
+		return
+	}
+
+	course, err := h.courseService.GetCourseByID(unit.CourseID.String())
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "Course not found"})
+		return
+	}
+
+	if roleStr == string(models.RoleLecturer) {
+		lecturerID, err := uuid.Parse(userIDStr)
+		if err != nil {
+			c.JSON(http.StatusUnauthorized, gin.H{"error": "User not authenticated"})
+			return
+		}
+		if course.CreatorID != lecturerID {
+			c.JSON(http.StatusForbidden, gin.H{"error": "Access denied"})
+			return
+		}
+	} else if roleStr == string(models.RoleStudent) {
+		enrollment, err := h.enrollmentStore.GetEnrollmentByStudentAndCourse(userIDStr, course.ID.String())
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to verify enrollment"})
+			return
+		}
+		if enrollment == nil || enrollment.Status != models.EnrollmentStatusEnrolled {
+			c.JSON(http.StatusForbidden, gin.H{"error": "You must be enrolled in this course to access this resource"})
+			return
+		}
+	} else {
+		c.JSON(http.StatusForbidden, gin.H{"error": "Access denied"})
+		return
+	}
+
+	docs, err := h.documentStore.ListDocumentsByLearningUnit(c.Request.Context(), unitID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to fetch materials"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"documents": docs})
+}
+
+func (h *LearningUnitHandler) DownloadMaterial(c *gin.Context) {
+	userIDValue, exists := c.Get("user_id")
+	if !exists {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "User not authenticated"})
+		return
+	}
+
+	userIDStr, ok := userIDValue.(string)
+	if !ok {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "User not authenticated"})
+		return
+	}
+
+	roleValue, ok := c.Get("user_role")
+	if !ok {
+		c.JSON(http.StatusForbidden, gin.H{"error": "Access denied"})
+		return
+	}
+	roleStr, ok := roleValue.(string)
+	if !ok {
+		c.JSON(http.StatusForbidden, gin.H{"error": "Access denied"})
+		return
+	}
+
+	documentIDStr := c.Param("documentId")
+	documentID, err := uuid.Parse(documentIDStr)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid document ID"})
+		return
+	}
+
+	doc, err := h.documentStore.GetDocumentByID(c.Request.Context(), documentID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to fetch material"})
+		return
+	}
+	if doc == nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "Material not found"})
+		return
+	}
+
+	unit, err := h.learningUnitService.GetLearningUnitByID(doc.LearningUnitID.String())
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "Learning unit not found"})
+		return
+	}
+
+	course, err := h.courseService.GetCourseByID(unit.CourseID.String())
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "Course not found"})
+		return
+	}
+
+	if roleStr == string(models.RoleLecturer) {
+		lecturerID, err := uuid.Parse(userIDStr)
+		if err != nil {
+			c.JSON(http.StatusUnauthorized, gin.H{"error": "User not authenticated"})
+			return
+		}
+		if course.CreatorID != lecturerID {
+			c.JSON(http.StatusForbidden, gin.H{"error": "Access denied"})
+			return
+		}
+	} else if roleStr == string(models.RoleStudent) {
+		enrollment, err := h.enrollmentStore.GetEnrollmentByStudentAndCourse(userIDStr, course.ID.String())
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to verify enrollment"})
+			return
+		}
+		if enrollment == nil || enrollment.Status != models.EnrollmentStatusEnrolled {
+			c.JSON(http.StatusForbidden, gin.H{"error": "You must be enrolled in this course to access this resource"})
+			return
+		}
+	} else {
+		c.JSON(http.StatusForbidden, gin.H{"error": "Access denied"})
+		return
+	}
+
+	keyPath := doc.StoragePath
+	if strings.Contains(keyPath, "://") {
+		if u, err := url.Parse(keyPath); err == nil {
+			keyPath = u.Path
+		}
+	}
+	key := strings.TrimPrefix(path.Clean(keyPath), "/")
+	key = path.Base(key)
+
+	body, err := h.aiService.DownloadPDFFromR2(c.Request.Context(), key)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	defer body.Close()
+
+	c.Header("Content-Type", "application/pdf")
+	c.Header("Content-Disposition", fmt.Sprintf("inline; filename=%q", doc.FileName))
+	c.Status(http.StatusOK)
+	_, _ = io.Copy(c.Writer, body)
 }
 
 func (h *LearningUnitHandler) UpdateQuiz(c *gin.Context) {
