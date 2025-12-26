@@ -42,6 +42,10 @@ export default function StudentCourseDetailPage() {
   const [assignmentsLoadingByUnitId, setAssignmentsLoadingByUnitId] = useState<Record<string, boolean>>({});
   const [assignmentsErrorByUnitId, setAssignmentsErrorByUnitId] = useState<Record<string, string | null>>({});
 
+  const [submittedAssignmentsByUnitId, setSubmittedAssignmentsByUnitId] = useState<Record<string, Record<string, string>>>({});
+  const [submittedAssignmentsLoadingByUnitId, setSubmittedAssignmentsLoadingByUnitId] = useState<Record<string, boolean>>({});
+  const [submittedAssignmentsErrorByUnitId, setSubmittedAssignmentsErrorByUnitId] = useState<Record<string, string | null>>({});
+
   const [quizzesByUnitId, setQuizzesByUnitId] = useState<Record<string, Quiz[]>>({});
   const [quizzesLoadingByUnitId, setQuizzesLoadingByUnitId] = useState<Record<string, boolean>>({});
   const [quizzesErrorByUnitId, setQuizzesErrorByUnitId] = useState<Record<string, string | null>>({});
@@ -132,6 +136,7 @@ export default function StudentCourseDetailPage() {
           },
         };
       });
+      void loadSubmittedAssignments(unitId);
       return list;
     } catch (err) {
       setAssignmentsErrorByUnitId((prev) => ({
@@ -141,6 +146,46 @@ export default function StudentCourseDetailPage() {
       return null;
     } finally {
       setAssignmentsLoadingByUnitId((prev) => ({ ...prev, [unitId]: false }));
+    }
+  }
+
+  async function loadSubmittedAssignments(unitId: string) {
+    const token = getStoredToken();
+    if (!token) return null;
+    if (submittedAssignmentsLoadingByUnitId[unitId]) return null;
+    setSubmittedAssignmentsLoadingByUnitId((prev) => ({ ...prev, [unitId]: true }));
+    setSubmittedAssignmentsErrorByUnitId((prev) => ({ ...prev, [unitId]: null }));
+    try {
+      const res = await fetch(`/api/progress/units/${unitId}/assignments/submissions/me`, {
+        method: 'GET',
+        headers: {
+          Accept: 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+      });
+      const data = (await res.json().catch(() => ({}))) as {
+        submissions?: Array<{ assignment_id: string; created_at: string }>;
+        error?: string;
+        message?: string;
+      };
+      if (!res.ok) {
+        throw new Error(data?.error || data?.message || 'Failed to load submission status');
+      }
+      const map: Record<string, string> = {};
+      for (const s of Array.isArray(data?.submissions) ? data.submissions : []) {
+        if (!s?.assignment_id) continue;
+        map[s.assignment_id] = s.created_at;
+      }
+      setSubmittedAssignmentsByUnitId((prev) => ({ ...prev, [unitId]: map }));
+      return map;
+    } catch (err) {
+      setSubmittedAssignmentsErrorByUnitId((prev) => ({
+        ...prev,
+        [unitId]: err instanceof Error ? err.message : 'Failed to load submission status',
+      }));
+      return null;
+    } finally {
+      setSubmittedAssignmentsLoadingByUnitId((prev) => ({ ...prev, [unitId]: false }));
     }
   }
 
@@ -652,11 +697,35 @@ export default function StudentCourseDetailPage() {
                             <div className="divide-y divide-zinc-100 rounded-xl border border-zinc-200 bg-white">
                               {assignmentsByUnitId[unit.id].map((a) => (
                                 <div key={a.id} className="flex items-center justify-between gap-3 px-4 py-3">
-                                  <div className="min-w-0">
+                                  <button
+                                    type="button"
+                                    className="min-w-0 text-left"
+                                    onClick={() => {
+                                      if (!courseId) return;
+                                      router.push(`/courses/${courseId}/units/${unit.id}/assignments/${a.id}`);
+                                    }}
+                                  >
                                     <div className="truncate text-sm font-medium text-zinc-900">{a.title}</div>
                                     <div className="text-xs text-zinc-500">
                                       {a.due_date ? `Due ${new Date(a.due_date).toLocaleString()}` : 'No due date'}
                                     </div>
+                                  </button>
+                                  <div className="flex items-center gap-2">
+                                    {submittedAssignmentsByUnitId[unit.id]?.[a.id] && (
+                                      <span className="rounded-full border border-emerald-200 bg-emerald-50 px-2 py-1 text-xs font-medium text-emerald-700">
+                                        Submitted
+                                      </span>
+                                    )}
+                                    <button
+                                      type="button"
+                                      className="inline-flex items-center justify-center rounded-md border border-zinc-200 bg-white px-3 py-2 text-sm font-medium text-zinc-900 hover:bg-zinc-50"
+                                      onClick={() => {
+                                        if (!courseId) return;
+                                        router.push(`/courses/${courseId}/units/${unit.id}/assignments/${a.id}`);
+                                      }}
+                                    >
+                                      View
+                                    </button>
                                   </div>
                                 </div>
                               ))}
