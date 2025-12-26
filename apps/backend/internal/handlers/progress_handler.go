@@ -280,6 +280,70 @@ func (h *ProgressHandler) GetMyAssignmentSubmission(c *gin.Context) {
 	})
 }
 
+func (h *ProgressHandler) GetMyQuizSubmission(c *gin.Context) {
+	userIDVal, exists := c.Get("user_id")
+	if !exists {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "User not authenticated"})
+		return
+	}
+
+	userIDStr, ok := userIDVal.(string)
+	if !ok {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "User not authenticated"})
+		return
+	}
+
+	userID, err := uuid.Parse(userIDStr)
+	if err != nil {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "User not authenticated"})
+		return
+	}
+
+	quizIDStr := c.Param("quizId")
+	quizID, err := uuid.Parse(quizIDStr)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid quiz ID"})
+		return
+	}
+
+	quiz, err := h.quizService.GetQuizByID(quizID.String())
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "Quiz not found"})
+		return
+	}
+
+	unit, err := h.learningUnitService.GetLearningUnitByID(quiz.LearningUnitID.String())
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "Learning unit not found"})
+		return
+	}
+
+	enrollment, err := h.enrollmentStore.GetEnrollmentByStudentAndCourse(userID.String(), unit.CourseID.String())
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to verify enrollment"})
+		return
+	}
+	if enrollment == nil || enrollment.Status != models.EnrollmentStatusEnrolled {
+		c.JSON(http.StatusForbidden, gin.H{"error": "Enrollment required"})
+		return
+	}
+
+	attempt, err := h.quizService.GetLatestQuizAttemptByStudentAndQuiz(c.Request.Context(), quizID, userID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to fetch quiz submission"})
+		return
+	}
+	if attempt == nil {
+		c.JSON(http.StatusOK, gin.H{"submitted": false})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"submitted": true,
+		"attempt":   attempt,
+	})
+}
+
 func (h *ProgressHandler) GetMyAssignmentSubmissionsByUnit(c *gin.Context) {
 	userIDVal, exists := c.Get("user_id")
 	if !exists {
@@ -337,6 +401,60 @@ func (h *ProgressHandler) GetMyAssignmentSubmissionsByUnit(c *gin.Context) {
 		"unit_id":                  unitID.String(),
 		"submitted_assignment_ids": ids,
 		"submissions":              submissions,
+	})
+}
+
+func (h *ProgressHandler) GetMyQuizSubmissionsByUnit(c *gin.Context) {
+	userIDVal, exists := c.Get("user_id")
+	if !exists {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "User not authenticated"})
+		return
+	}
+
+	userIDStr, ok := userIDVal.(string)
+	if !ok {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "User not authenticated"})
+		return
+	}
+
+	userID, err := uuid.Parse(userIDStr)
+	if err != nil {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "User not authenticated"})
+		return
+	}
+
+	unitIDStr := c.Param("unitId")
+	unitID, err := uuid.Parse(unitIDStr)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid unit ID"})
+		return
+	}
+
+	unit, err := h.learningUnitService.GetLearningUnitByID(unitID.String())
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "Learning unit not found"})
+		return
+	}
+
+	enrollment, err := h.enrollmentStore.GetEnrollmentByStudentAndCourse(userID.String(), unit.CourseID.String())
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to verify enrollment"})
+		return
+	}
+	if enrollment == nil || enrollment.Status != models.EnrollmentStatusEnrolled {
+		c.JSON(http.StatusForbidden, gin.H{"error": "Enrollment required"})
+		return
+	}
+
+	attempts, err := h.quizService.GetLatestQuizAttemptsByStudentAndUnit(c.Request.Context(), unitID, userID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to fetch quiz submissions"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"unit_id":  unitID.String(),
+		"attempts": attempts,
 	})
 }
 
@@ -550,6 +668,16 @@ func (h *ProgressHandler) SubmitQuiz(c *gin.Context) {
 	}
 	if enrollment == nil || enrollment.Status != models.EnrollmentStatusEnrolled {
 		c.JSON(http.StatusForbidden, gin.H{"error": "Enrollment required"})
+		return
+	}
+
+	existingAttempt, err := h.quizService.GetLatestQuizAttemptByStudentAndQuiz(c.Request.Context(), quizID, userID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to fetch existing quiz attempts"})
+		return
+	}
+	if existingAttempt != nil {
+		c.JSON(http.StatusConflict, gin.H{"error": "Quiz already submitted"})
 		return
 	}
 
