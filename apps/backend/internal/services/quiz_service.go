@@ -163,6 +163,14 @@ func (s *QuizService) SubmitQuizAttempt(
 	return s.quizStore.CreateQuizAttempt(ctx, attempt)
 }
 
+func (s *QuizService) GetLatestQuizAttemptByStudentAndQuiz(ctx context.Context, quizID uuid.UUID, studentID uuid.UUID) (*models.QuizAttempt, error) {
+	return s.quizStore.GetLatestQuizAttemptByStudentAndQuiz(ctx, quizID, studentID)
+}
+
+func (s *QuizService) GetLatestQuizAttemptsByStudentAndUnit(ctx context.Context, unitID uuid.UUID, studentID uuid.UUID) ([]*models.QuizAttempt, error) {
+	return s.quizStore.GetLatestQuizAttemptsByStudentAndUnit(ctx, unitID, studentID)
+}
+
 // CreateFlashcardSet handles flashcard set creation business logic
 func (s *QuizService) CreateFlashcardSet(learningUnitID, title string) (*models.FlashcardSet, error) {
 	// Validate required fields

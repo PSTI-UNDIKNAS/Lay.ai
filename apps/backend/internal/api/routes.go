@@ -197,10 +197,12 @@ func SetupRoutes(db *pgxpool.Pool) *gin.Engine {
 			progress.GET("/courses/:courseId/me", middleware.EnrollmentRequiredMiddleware(enrollmentStore), progressHandler.GetStudentProgress)
 			progress.POST("/units/:unitId/complete", progressHandler.CompleteUnit)
 			progress.GET("/units/:unitId/assignments/submissions/me", progressHandler.GetMyAssignmentSubmissionsByUnit)
+			progress.GET("/units/:unitId/quizzes/submissions/me", progressHandler.GetMyQuizSubmissionsByUnit)
 			progress.POST("/assignments/:assignmentId/upload-url", progressHandler.GenerateAssignmentUploadURL)
 			progress.POST("/assignments/:assignmentId/upload", progressHandler.UploadAssignmentPDF)
 			progress.GET("/assignments/:assignmentId/submission/me", progressHandler.GetMyAssignmentSubmission)
 			progress.POST("/assignments/:assignmentId/submit", progressHandler.SubmitAssignment)
+			progress.GET("/quizzes/:quizId/submission/me", progressHandler.GetMyQuizSubmission)
 			progress.POST("/quizzes/:quizId/submit", progressHandler.SubmitQuiz)
 		}
 

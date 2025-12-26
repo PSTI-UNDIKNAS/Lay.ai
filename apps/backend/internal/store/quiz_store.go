@@ -492,3 +492,79 @@ func (s *QuizStore) GetQuizAttemptsByQuizID(ctx context.Context, quizID uuid.UUI
 
 	return attempts, nil
 }
+
+func (s *QuizStore) GetLatestQuizAttemptByStudentAndQuiz(ctx context.Context, quizID uuid.UUID, studentID uuid.UUID) (*models.QuizAttempt, error) {
+	var a models.QuizAttempt
+	err := s.db.QueryRow(
+		ctx,
+		`
+		SELECT id, quiz_id, student_id, attempt_no, NULL::jsonb AS answers, score, max_score, created_at
+		FROM quiz_attempts
+		WHERE quiz_id = $1 AND student_id = $2
+		ORDER BY attempt_no DESC, created_at DESC
+		LIMIT 1
+	`,
+		quizID,
+		studentID,
+	).Scan(
+		&a.ID,
+		&a.QuizID,
+		&a.StudentID,
+		&a.AttemptNo,
+		&a.Answers,
+		&a.Score,
+		&a.MaxScore,
+		&a.CreatedAt,
+	)
+	if err != nil {
+		if err == pgx.ErrNoRows {
+			return nil, nil
+		}
+		return nil, fmt.Errorf("failed to get latest quiz attempt: %w", err)
+	}
+	return &a, nil
+}
+
+func (s *QuizStore) GetLatestQuizAttemptsByStudentAndUnit(ctx context.Context, unitID uuid.UUID, studentID uuid.UUID) ([]*models.QuizAttempt, error) {
+	rows, err := s.db.Query(
+		ctx,
+		`
+		SELECT DISTINCT ON (a.quiz_id)
+			a.id, a.quiz_id, a.student_id, a.attempt_no, NULL::jsonb AS answers, a.score, a.max_score, a.created_at
+		FROM quiz_attempts a
+		INNER JOIN quizzes q ON q.id = a.quiz_id
+		WHERE q.learning_unit_id = $1 AND a.student_id = $2
+		ORDER BY a.quiz_id, a.attempt_no DESC, a.created_at DESC
+	`,
+		unitID,
+		studentID,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get latest quiz attempts by unit: %w", err)
+	}
+	defer rows.Close()
+
+	attempts := []*models.QuizAttempt{}
+	for rows.Next() {
+		var a models.QuizAttempt
+		if err := rows.Scan(
+			&a.ID,
+			&a.QuizID,
+			&a.StudentID,
+			&a.AttemptNo,
+			&a.Answers,
+			&a.Score,
+			&a.MaxScore,
+			&a.CreatedAt,
+		); err != nil {
+			return nil, fmt.Errorf("failed to scan quiz attempt: %w", err)
+		}
+		attempts = append(attempts, &a)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("failed to iterate quiz attempts: %w", err)
+	}
+
+	return attempts, nil
+}
