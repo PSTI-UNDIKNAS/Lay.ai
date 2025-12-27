@@ -1,4 +1,7 @@
 import type { NextConfig } from "next";
+import { existsSync } from "node:fs";
+
+const isDocker = existsSync("/.dockerenv");
 
 const nextConfig: NextConfig = {
   output: "standalone",
@@ -20,22 +23,32 @@ const nextConfig: NextConfig = {
   },
 
   async rewrites() {
-    const isProd = process.env.NODE_ENV === 'production';
-
     const backendBase =
-      process.env.GATEWAY_BACKEND_URL || (isProd ? 'http://backend:8080' : 'http://localhost:8080');
+      process.env.GATEWAY_BACKEND_URL || (isDocker ? 'http://backend:8080' : 'http://127.0.0.1:8080');
     const studentBase =
-      process.env.GATEWAY_STUDENT_URL || (isProd ? 'http://student-web:3000' : 'http://localhost:3001');
+      process.env.GATEWAY_STUDENT_URL || (isDocker ? 'http://student-web:3000' : 'http://127.0.0.1:3001');
     const lecturerBase =
-      process.env.GATEWAY_LECTURER_URL || (isProd ? 'http://lecturer-web:3000' : 'http://localhost:3002');
+      process.env.GATEWAY_LECTURER_URL || (isDocker ? 'http://lecturer-web:3000' : 'http://127.0.0.1:3002');
     const adminBase =
-      process.env.GATEWAY_ADMIN_URL || (isProd ? 'http://admin-web:3000' : 'http://localhost:3003');
+      process.env.GATEWAY_ADMIN_URL || (isDocker ? 'http://admin-web:3000' : 'http://127.0.0.1:3003');
 
     return [
       // API routes - proxy to backend
       {
         source: '/api/:path*',
         destination: `${backendBase}/api/:path*`,
+      },
+      {
+        source: '/student/_next/:path*',
+        destination: `${studentBase}/student/_next/:path*`,
+      },
+      {
+        source: '/lecturer/_next/:path*',
+        destination: `${lecturerBase}/lecturer/_next/:path*`,
+      },
+      {
+        source: '/admin/_next/:path*',
+        destination: `${adminBase}/admin/_next/:path*`,
       },
       // Student portal - proxy to student-web
       {

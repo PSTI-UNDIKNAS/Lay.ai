@@ -64,6 +64,57 @@ else
   npm install
 fi
 
+if [ "$MODE" = "prod" ]; then
+  export NODE_ENV=production
+  export NEXT_PUBLIC_API_URL=/api
+  export GATEWAY_BACKEND_URL="http://127.0.0.1:${BACKEND_PORT}"
+  export GATEWAY_STUDENT_URL="http://127.0.0.1:3001"
+  export GATEWAY_LECTURER_URL="http://127.0.0.1:3002"
+  export GATEWAY_ADMIN_URL="http://127.0.0.1:3003"
+
+  echo "Building all apps (turbo)..."
+  if command -v bun >/dev/null 2>&1; then
+    bun run build
+  else
+    npm run build
+  fi
+
+  for app in gateway student-web lecturer-web admin-web; do
+    standalone_dir="apps/${app}/.next/standalone/apps/${app}"
+    standalone_entry="${standalone_dir}/server.js"
+
+    if [ ! -f "$standalone_entry" ]; then
+      echo "Missing ${standalone_entry} (build did not run or failed)."
+      exit 1
+    fi
+
+    standalone_next_dir="${standalone_dir}/.next"
+
+    if [ ! -d "${standalone_next_dir}" ]; then
+      echo "Missing ${standalone_next_dir} (standalone output incomplete)."
+      exit 1
+    fi
+
+    if [ -L "${standalone_next_dir}/static" ] && [ ! -e "${standalone_next_dir}/static" ]; then
+      rm "${standalone_next_dir}/static"
+    fi
+
+    if [ ! -e "${standalone_next_dir}/static" ]; then
+      ln -s "../../../../static" "${standalone_next_dir}/static"
+    fi
+
+    if [ -d "apps/${app}/public" ]; then
+      if [ -L "${standalone_dir}/public" ] && [ ! -e "${standalone_dir}/public" ]; then
+        rm "${standalone_dir}/public"
+      fi
+
+      if [ ! -e "${standalone_dir}/public" ]; then
+        ln -s "../../../../public" "${standalone_dir}/public"
+      fi
+    fi
+  done
+fi
+
 # Run all app services concurrently
 export CONCURRENTLY_FORCE_TTY=1
 if command -v bunx >/dev/null 2>&1; then
