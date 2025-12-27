@@ -1,6 +1,15 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useRef, useState, type ButtonHTMLAttributes, type InputHTMLAttributes } from 'react';
+import {
+  Suspense,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ButtonHTMLAttributes,
+  type InputHTMLAttributes,
+} from 'react';
 import StudentShell from '@/components/student/StudentShell';
 import Card from '@/components/student/Card';
 import { cn } from '@/lib/utils';
@@ -76,6 +85,14 @@ function Input({ className, ...props }: InputProps) {
 }
 
 export default function StudentAiPage() {
+  return (
+    <Suspense fallback={null}>
+      <StudentAiPageInner />
+    </Suspense>
+  );
+}
+
+function StudentAiPageInner() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const selectedConversationId = searchParams.get('conversationId');

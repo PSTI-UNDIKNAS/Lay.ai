@@ -6,6 +6,7 @@
 # Usage:
 #   ./scripts/run-all.sh                 # starts DB container and all apps
 #   START_DB=0 ./scripts/run-all.sh      # skips starting the DB container
+#   MODE=prod ./scripts/run-all.sh       # builds all apps, then starts them (no dev compiling)
 #
 # Notes:
 # - If backend runs locally, use localhost in DATABASE_URL
@@ -32,6 +33,7 @@ DB_PORT=${DB_PORT:-5432}
 BACKEND_PORT=${BACKEND_PORT:-8080}
 JWT_SECRET=${JWT_SECRET:-dev-secret}
 START_DB=${START_DB:-1}
+MODE=${MODE:-dev}
 
 # Start only the database via Docker (optional)
 if [ "$START_DB" = "1" ]; then
@@ -40,17 +42,22 @@ if [ "$START_DB" = "1" ]; then
 fi
 
 # Construct a local DATABASE_URL for the host (non-Docker) backend
-export DATABASE_URL="postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@localhost:${DB_PORT}/${POSTGRES_DB}?sslmode=disable"
+if [ -z "${DATABASE_URL:-}" ] || [[ "${DATABASE_URL}" == *"@database:"* ]]; then
+  export DATABASE_URL="postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@localhost:${DB_PORT}/${POSTGRES_DB}?sslmode=disable"
+fi
 export JWT_SECRET
 
 # Reduce telemetry noise in local dev (optional)
 export NEXT_TELEMETRY_DISABLED=1
 export TURBO_TELEMETRY_DISABLED=1
 
-echo "Using DATABASE_URL=${DATABASE_URL}"
+MASKED_DATABASE_URL="$DATABASE_URL"
+MASKED_DATABASE_URL="$(echo "$MASKED_DATABASE_URL" | sed -E 's#(postgres://[^:]+):[^@]+@#\1:****@#')"
+echo "Using DATABASE_URL=${MASKED_DATABASE_URL}"
 echo "Backend port: ${BACKEND_PORT}"
 echo "Gateway: http://localhost:3000 (proxies /student, /lecturer, /admin and /api)"
 echo "Student: http://localhost:3001 | Lecturer: http://localhost:3002 | Backend API: http://localhost:${BACKEND_PORT}"
+echo "Mode: ${MODE}"
 
 # Ensure dependencies are installed
 if command -v bun >/dev/null 2>&1; then
@@ -61,21 +68,64 @@ else
   npm install
 fi
 
+if [ "$MODE" = "prod" ]; then
+  export NODE_ENV=production
+  export NEXT_PUBLIC_API_URL=/api
+  export GATEWAY_BACKEND_URL="http://127.0.0.1:${BACKEND_PORT}"
+  export GATEWAY_STUDENT_URL="http://127.0.0.1:3001"
+  export GATEWAY_LECTURER_URL="http://127.0.0.1:3002"
+  export GATEWAY_ADMIN_URL="http://127.0.0.1:3003"
+
+  echo "Building all apps (turbo)..."
+  if command -v bun >/dev/null 2>&1; then
+    bun run build
+  else
+    npm run build
+  fi
+
+  for app in gateway student-web lecturer-web admin-web; do
+    standalone_entry="apps/${app}/.next/standalone/apps/${app}/server.js"
+    if [ ! -f "$standalone_entry" ]; then
+      echo "Missing ${standalone_entry} (build did not run or failed)."
+      exit 1
+    fi
+  done
+fi
+
 # Run all app services concurrently
+export CONCURRENTLY_FORCE_TTY=1
 if command -v bunx >/dev/null 2>&1; then
   echo "Starting apps with bunx concurrently..."
-  bunx concurrently \
-    "npm run dev:gateway" \
-    "npm run dev:student" \
-    "npm run dev:lecturer" \
-    "npm run dev:backend" \
-    "npm run dev:admin"
+  if [ "$MODE" = "prod" ]; then
+    bunx concurrently \
+      "cd apps/gateway && PORT=3000 node .next/standalone/apps/gateway/server.js" \
+      "cd apps/student-web && PORT=3001 node .next/standalone/apps/student-web/server.js" \
+      "cd apps/lecturer-web && PORT=3002 node .next/standalone/apps/lecturer-web/server.js" \
+      "cd apps/admin-web && PORT=3003 node .next/standalone/apps/admin-web/server.js" \
+      "cd apps/backend && DATABASE_URL=\"${DATABASE_URL}\" JWT_SECRET=\"${JWT_SECRET}\" BACKEND_PORT=${BACKEND_PORT:-8080} go run ./cmd/api/main.go"
+  else
+    bunx concurrently \
+      "npm run dev:gateway" \
+      "npm run dev:student" \
+      "npm run dev:lecturer" \
+      "npm run dev:backend" \
+      "npm run dev:admin"
+  fi
 else
   echo "Starting apps with npx concurrently..."
-  npx concurrently \
-    "npm run dev:gateway" \
-    "npm run dev:student" \
-    "npm run dev:lecturer" \
-    "npm run dev:backend" \
-    "npm run dev:admin"
+  if [ "$MODE" = "prod" ]; then
+    npx concurrently \
+      "cd apps/gateway && PORT=3000 node .next/standalone/apps/gateway/server.js" \
+      "cd apps/student-web && PORT=3001 node .next/standalone/apps/student-web/server.js" \
+      "cd apps/lecturer-web && PORT=3002 node .next/standalone/apps/lecturer-web/server.js" \
+      "cd apps/admin-web && PORT=3003 node .next/standalone/apps/admin-web/server.js" \
+      "cd apps/backend && DATABASE_URL=\"${DATABASE_URL}\" JWT_SECRET=\"${JWT_SECRET}\" BACKEND_PORT=${BACKEND_PORT:-8080} go run ./cmd/api/main.go"
+  else
+    npx concurrently \
+      "npm run dev:gateway" \
+      "npm run dev:student" \
+      "npm run dev:lecturer" \
+      "npm run dev:backend" \
+      "npm run dev:admin"
+  fi
 fi

@@ -2,6 +2,8 @@ FROM oven/bun:latest
 
 WORKDIR /app
 
+ENV NODE_ENV=development
+
 # Copy package files
 COPY package.json bun.lock* ./
 COPY turbo.json ./
@@ -21,5 +23,6 @@ COPY . .
 RUN bunx turbo build --filter=lecturer-web
 
 # Expose port and start
+ENV NODE_ENV=production
 EXPOSE 3000
 CMD ["bun", "run", "--cwd", "apps/lecturer-web", "start"]
