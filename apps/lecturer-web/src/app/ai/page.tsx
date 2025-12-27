@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { Suspense, useEffect, useMemo, useRef, useState } from 'react';
 import LecturerShell from '@/components/lecturer/LecturerShell';
 import Card from '@/components/lecturer/Card';
 import { Button } from '@/components/ui/button';
@@ -47,6 +47,14 @@ import {
 } from '@/lib/auth-api';
 
 export default function AiChatbotPage() {
+  return (
+    <Suspense fallback={null}>
+      <AiChatbotPageInner />
+    </Suspense>
+  );
+}
+
+function AiChatbotPageInner() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const selectedConversationId = searchParams.get('conversationId');

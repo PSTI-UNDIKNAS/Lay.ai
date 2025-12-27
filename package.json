@@ -23,7 +23,7 @@
     "start:all": "concurrently \"npm run start:gateway\" \"cd apps/student-web && PORT=3001 npm start\" \"cd apps/lecturer-web && PORT=3002 npm start\" \"cd apps/admin-web && PORT=3003 npm start\" \"cd apps/backend && BACKEND_PORT=${BACKEND_PORT:-8080} go run ./cmd/api/main.go\""
   },
   "devDependencies": {
-    "turbo": "^2.5.8",
+    "turbo": "^2.7.2",
     "concurrently": "^8.2.2",
     "babel-plugin-react-compiler": "^1.0.0"
   },
