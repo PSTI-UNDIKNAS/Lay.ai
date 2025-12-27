@@ -84,10 +84,37 @@ if [ "$MODE" = "prod" ]; then
   fi
 
   for app in gateway student-web lecturer-web admin-web; do
-    standalone_entry="apps/${app}/.next/standalone/apps/${app}/server.js"
+    standalone_dir="apps/${app}/.next/standalone/apps/${app}"
+    standalone_entry="${standalone_dir}/server.js"
+
     if [ ! -f "$standalone_entry" ]; then
       echo "Missing ${standalone_entry} (build did not run or failed)."
       exit 1
+    fi
+
+    standalone_next_dir="${standalone_dir}/.next"
+
+    if [ ! -d "${standalone_next_dir}" ]; then
+      echo "Missing ${standalone_next_dir} (standalone output incomplete)."
+      exit 1
+    fi
+
+    if [ -L "${standalone_next_dir}/static" ] && [ ! -e "${standalone_next_dir}/static" ]; then
+      rm "${standalone_next_dir}/static"
+    fi
+
+    if [ ! -e "${standalone_next_dir}/static" ]; then
+      ln -s "../../../../static" "${standalone_next_dir}/static"
+    fi
+
+    if [ -d "apps/${app}/public" ]; then
+      if [ -L "${standalone_dir}/public" ] && [ ! -e "${standalone_dir}/public" ]; then
+        rm "${standalone_dir}/public"
+      fi
+
+      if [ ! -e "${standalone_dir}/public" ]; then
+        ln -s "../../../../public" "${standalone_dir}/public"
+      fi
     fi
   done
 fi
