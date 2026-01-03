@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-# Run all app services locally (gateway, student-web, lecturer-web, backend)
+# Run all app services locally (Caddy proxy, student-web, lecturer-web, admin-web, backend)
 # while using Docker only for the PostgreSQL database.
 #
 # Usage:
@@ -51,7 +51,7 @@ export TURBO_TELEMETRY_DISABLED=1
 
 echo "Using DATABASE_URL=${DATABASE_URL}"
 echo "Backend port: ${BACKEND_PORT}"
-echo "Gateway: http://localhost:3000 (proxies /student, /lecturer, /admin and /api)"
+echo "Proxy (Caddy): http://localhost:3000 (proxies /student, /lecturer, /admin and /api)"
 echo "Student: http://localhost:3001 | Lecturer: http://localhost:3002 | Backend API: http://localhost:${BACKEND_PORT}"
 echo "Mode: ${MODE}"
 
@@ -67,10 +67,6 @@ fi
 if [ "$MODE" = "prod" ]; then
   export NODE_ENV=production
   export NEXT_PUBLIC_API_URL=/api
-  export GATEWAY_BACKEND_URL="http://127.0.0.1:${BACKEND_PORT}"
-  export GATEWAY_STUDENT_URL="http://127.0.0.1:3001"
-  export GATEWAY_LECTURER_URL="http://127.0.0.1:3002"
-  export GATEWAY_ADMIN_URL="http://127.0.0.1:3003"
 
   echo "Building all apps (turbo)..."
   if command -v bun >/dev/null 2>&1; then
@@ -79,7 +75,7 @@ if [ "$MODE" = "prod" ]; then
     npm run build
   fi
 
-  for app in gateway student-web lecturer-web admin-web; do
+  for app in student-web lecturer-web admin-web; do
     standalone_dir="apps/${app}/.next/standalone/apps/${app}"
     standalone_entry="${standalone_dir}/server.js"
 
@@ -120,7 +116,7 @@ export CONCURRENTLY_FORCE_TTY=1
 if command -v bunx >/dev/null 2>&1; then
   echo "Starting apps with bunx concurrently..."
   bunx concurrently \
-    "npm run dev:gateway" \
+    "npm run dev:proxy" \
     "npm run dev:student" \
     "npm run dev:lecturer" \
     "npm run dev:backend" \
@@ -128,7 +124,7 @@ if command -v bunx >/dev/null 2>&1; then
 else
   echo "Starting apps with npx concurrently..."
   npx concurrently \
-    "npm run dev:gateway" \
+    "npm run dev:proxy" \
     "npm run dev:student" \
     "npm run dev:lecturer" \
     "npm run dev:backend" \

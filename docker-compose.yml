@@ -26,14 +26,12 @@ services:
       - database
 
   gateway:
-    build:
-      context: .
-      dockerfile: ./apps/gateway/Dockerfile
+    image: caddy:2-alpine
     restart: unless-stopped
     ports:
       - "3000:3000"  # Single external entry point
-    environment:
-      - NODE_ENV=production
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
     depends_on:
       - backend
       - student-web
@@ -47,7 +45,7 @@ services:
     restart: unless-stopped
     environment:
       - NODE_ENV=production
-      - NEXT_PUBLIC_API_URL=http://backend:8080
+      - NEXT_PUBLIC_API_URL=/api
     depends_on:
       - backend
 
@@ -58,7 +56,7 @@ services:
     restart: unless-stopped
     environment:
       - NODE_ENV=production
-      - NEXT_PUBLIC_API_URL=http://backend:8080
+      - NEXT_PUBLIC_API_URL=/api
     depends_on:
       - backend
 
@@ -69,7 +67,7 @@ services:
     restart: unless-stopped
     environment:
       - NODE_ENV=production
-      - NEXT_PUBLIC_API_URL=http://backend:8080
+      - NEXT_PUBLIC_API_URL=/api
     depends_on:
       - backend
 

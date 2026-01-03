@@ -1,6 +1,4 @@
-const API_BASE_URL =
-  process.env.NEXT_PUBLIC_API_URL ||
-  (process.env.NODE_ENV === 'production' ? 'http://backend:8080/api' : '/api');
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || '/api';
 
 function getAuthHeaders(): HeadersInit {
   const token =
