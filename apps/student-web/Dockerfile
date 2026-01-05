@@ -1,6 +1,10 @@
-FROM oven/bun:latest
+FROM node:20-alpine
 
 WORKDIR /app
+
+RUN apk add --no-cache bash curl
+RUN curl -fsSL https://bun.sh/install | bash
+ENV PATH="/root/.bun/bin:${PATH}"
 
 # Copy package files
 COPY package.json bun.lock* ./
@@ -17,9 +21,9 @@ RUN bun install
 # Copy source code
 COPY . .
 
-# Build the app
-RUN bunx turbo build --filter=student-web
+# Build shared packages first, then build the Next.js app (Next.js 16 requires Node 20.9+)
+RUN npx turbo build --filter=@layai/types --filter=@layai/utils --filter=@layai/ui --filter=@layai/store
+RUN cd apps/student-web && npx next build
 
-# Expose port and start
 EXPOSE 3000
-CMD ["bun", "run", "--cwd", "apps/student-web", "start"]
+CMD ["npm", "run", "--prefix", "apps/student-web", "start"]

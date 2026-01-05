@@ -14,7 +14,7 @@ services:
       - db-data:/var/lib/postgresql/data
 
   backend:
-    build: ./apps/backend
+    image: ghcr.io/${GHCR_OWNER:?set GHCR_OWNER}/layai-backend:${IMAGE_TAG:-latest}
     restart: unless-stopped
     ports:
       - "${BACKEND_PORT}:8080"
@@ -39,9 +39,7 @@ services:
       - admin-web
 
   admin-web:
-    build:
-      context: .
-      dockerfile: ./apps/admin-web/Dockerfile
+    image: ghcr.io/${GHCR_OWNER:?set GHCR_OWNER}/layai-admin-web:${IMAGE_TAG:-latest}
     restart: unless-stopped
     environment:
       - NODE_ENV=production
@@ -50,9 +48,7 @@ services:
       - backend
 
   lecturer-web:
-    build:
-      context: .
-      dockerfile: ./apps/lecturer-web/Dockerfile
+    image: ghcr.io/${GHCR_OWNER:?set GHCR_OWNER}/layai-lecturer-web:${IMAGE_TAG:-latest}
     restart: unless-stopped
     environment:
       - NODE_ENV=production
@@ -61,9 +57,7 @@ services:
       - backend
 
   student-web:
-    build:
-      context: .
-      dockerfile: ./apps/student-web/Dockerfile
+    image: ghcr.io/${GHCR_OWNER:?set GHCR_OWNER}/layai-student-web:${IMAGE_TAG:-latest}
     restart: unless-stopped
     environment:
       - NODE_ENV=production
