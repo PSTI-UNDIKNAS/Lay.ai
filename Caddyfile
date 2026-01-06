@@ -1,0 +1,18 @@
+:3000 {
+	encode gzip zstd
+
+	@root path /
+	redir @root /student/login 302
+
+	@api path /api/*
+	reverse_proxy @api {$BACKEND_UPSTREAM:backend:8080}
+
+	@student path /student*
+	reverse_proxy @student {$STUDENT_UPSTREAM:student-web:3000}
+
+	@lecturer path /lecturer*
+	reverse_proxy @lecturer {$LECTURER_UPSTREAM:lecturer-web:3000}
+
+	@admin path /admin*
+	reverse_proxy @admin {$ADMIN_UPSTREAM:admin-web:3000}
+}

@@ -1,0 +1,32 @@
+{
+  "name": "layai-monorepo",
+  "private": true,
+  "packageManager": "bun@1.0.0",
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "build": "turbo build",
+    "dev": "turbo dev",
+    "lint": "turbo lint",
+    "type-check": "turbo type-check",
+    "clean": "turbo clean",
+    "watch": "turbo watch",
+    "dev:proxy": "docker rm -f layai-caddy >/dev/null 2>&1 || true; docker run --rm --name layai-caddy -p 3000:3000 -e BACKEND_UPSTREAM=host.docker.internal:8080 -e STUDENT_UPSTREAM=host.docker.internal:3001 -e LECTURER_UPSTREAM=host.docker.internal:3002 -e ADMIN_UPSTREAM=host.docker.internal:3003 -v \"$PWD/Caddyfile:/etc/caddy/Caddyfile:ro\" caddy:2-alpine",
+    "dev:student": "cd apps/student-web && PORT=3001 npm run dev",
+    "dev:lecturer": "cd apps/lecturer-web && PORT=3002 npm run dev",
+    "dev:admin": "cd apps/admin-web && PORT=3003 npm run dev",
+    "dev:backend": "cd apps/backend && BACKEND_PORT=${BACKEND_PORT:-8080} go run ./cmd/api/main.go",
+    "dev:all": "concurrently \"npm run dev:proxy\" \"npm run dev:student\" \"npm run dev:lecturer\" \"npm run dev:admin\" \"npm run dev:backend\"",
+    "start:all": "concurrently \"npm run dev:proxy\" \"cd apps/student-web && PORT=3001 npm start\" \"cd apps/lecturer-web && PORT=3002 npm start\" \"cd apps/admin-web && PORT=3003 npm start\" \"cd apps/backend && BACKEND_PORT=${BACKEND_PORT:-8080} go run ./cmd/api/main.go\""
+  },
+  "devDependencies": {
+    "turbo": "^2.7.2",
+    "concurrently": "^8.2.2",
+    "babel-plugin-react-compiler": "^1.0.0"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}

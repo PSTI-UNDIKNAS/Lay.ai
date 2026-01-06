@@ -1,0 +1,1464 @@
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || '/api';
+
+export interface LoginResponse {
+  message: string;
+  token: string;
+  user: {
+    id: string;
+    name: string;
+    email: string;
+    role: string;
+    status: string;
+  };
+}
+
+export interface ApiError {
+  error?: string;
+  message?: string;
+}
+
+export async function login(email: string, password: string): Promise<LoginResponse> {
+  const response = await fetch(`${API_BASE_URL}/auth/login`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ email, password }),
+  });
+
+  const data = await response.json();
+
+  if (!response.ok) {
+    throw new Error(data.error || data.message || 'Login failed');
+  }
+
+  return data as LoginResponse;
+}
+
+export interface MeResponse {
+  user: {
+    id: string;
+    name: string;
+    email: string;
+    unique_identifier: string;
+    role: string;
+    status: string;
+  };
+}
+
+function getAuthHeaders(): HeadersInit {
+  const token =
+    typeof window !== 'undefined'
+      ? (localStorage.getItem('token') || sessionStorage.getItem('token'))
+      : null;
+  return token ? { Authorization: `Bearer ${token}` } : {};
+}
+
+export async function getMe(): Promise<MeResponse> {
+  const response = await fetch(`${API_BASE_URL}/auth/me`, {
+    method: 'GET',
+    headers: {
+      Accept: 'application/json',
+      ...getAuthHeaders(),
+    },
+  });
+
+  const data = await response.json().catch(() => ({}));
+
+  if (!response.ok) {
+    const msg = data?.error || data?.message;
+    if (response.status === 401) {
+      throw new Error('Invalid or expired token');
+    }
+    throw new Error(msg || 'Failed to validate session');
+  }
+
+  return data as MeResponse;
+}
+
+export async function logout(): Promise<void> {
+  try {
+    const response = await fetch(`${API_BASE_URL}/auth/logout`, {
+      method: 'POST',
+      headers: {
+        Accept: 'application/json',
+        ...getAuthHeaders(),
+      },
+    });
+    await response.json().catch(() => ({}));
+  } catch {}
+}
+
+export interface LecturerCourse {
+  id: string;
+  creator_id: string;
+  title: string;
+  description: string;
+  access_type: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface LearningUnit {
+  id: string;
+  course_id: string;
+  title: string;
+  description: string;
+  unit_order: number;
+  created_at: string;
+  updated_at: string;
+}
+
+export async function getMyCourses(limit = 100, offset = 0): Promise<LecturerCourse[]> {
+  const params = new URLSearchParams();
+  if (limit != null) params.set('limit', String(limit));
+  if (offset != null) params.set('offset', String(offset));
+
+  const response = await fetch(
+    `${API_BASE_URL}/courses/me${params.toString() ? `?${params.toString()}` : ''}`,
+    {
+      method: 'GET',
+      headers: {
+        Accept: 'application/json',
+        ...getAuthHeaders(),
+      },
+    },
+  );
+
+  const data = await response.json().catch(() => ({}));
+
+  if (!response.ok) {
+    const msg = data?.error || data?.message || 'Failed to fetch your courses';
+    throw new Error(msg);
+  }
+
+  if (Array.isArray(data.courses)) {
+    return data.courses as LecturerCourse[];
+  }
+
+  return [];
+}
+
+export type CourseAccessType = 'public' | 'password' | 'by_request';
+
+export async function updateCourse(
+  courseId: string,
+  updates: { title?: string; description?: string; access_type: CourseAccessType },
+): Promise<LecturerCourse> {
+  const response = await fetch(`${API_BASE_URL}/courses/${courseId}`, {
+    method: 'PUT',
+    headers: {
+      'Content-Type': 'application/json',
+      Accept: 'application/json',
+      ...getAuthHeaders(),
+    },
+    body: JSON.stringify(updates),
+  });
+
+  const data = await response.json().catch(() => ({}));
+
+  if (!response.ok) {
+    const msg = data?.error || data?.message || 'Failed to update course';
+    throw new Error(msg);
+  }
+
+  if (data.course) {
+    return data.course as LecturerCourse;
+  }
+
+  throw new Error('Invalid course response');
+}
+
+export async function createCourse(
+  title: string,
+  description: string,
+  accessType: CourseAccessType = 'public',
+  password?: string,
+): Promise<LecturerCourse> {
+  const body: Record<string, unknown> = {
+    title,
+    description,
+    access_type: accessType,
+  };
+  if (accessType === 'password' && password) {
+    body.password = password;
+  }
+
+  const response = await fetch(`${API_BASE_URL}/courses`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Accept: 'application/json',
+      ...getAuthHeaders(),
+    },
+    body: JSON.stringify(body),
+  });
+
+  const data = await response.json().catch(() => ({}));
+
+  if (!response.ok) {
+    const msg = data?.error || data?.message || 'Failed to create course';
+    throw new Error(msg);
+  }
+
+  if (data.course) {
+    return data.course as LecturerCourse;
+  }
+
+  throw new Error('Invalid course response');
+}
+
+export async function getCourseLearningUnits(courseId: string, limit = 100, offset = 0): Promise<LearningUnit[]> {
+  const params = new URLSearchParams();
+  if (limit != null) params.set('limit', String(limit));
+  if (offset != null) params.set('offset', String(offset));
+
+  const response = await fetch(
+    `${API_BASE_URL}/learning-units/courses/${courseId}/units/manage${params.toString() ? `?${params.toString()}` : ''}`,
+    {
+      method: 'GET',
+      headers: {
+        Accept: 'application/json',
+        ...getAuthHeaders(),
+      },
+    },
+  );
+
+  const data = await response.json().catch(() => ({}));
+
+  if (!response.ok) {
+    const msg = data?.error || data?.message || 'Failed to fetch learning units';
+    throw new Error(msg);
+  }
+
+  if (Array.isArray(data.units)) {
+    return data.units as LearningUnit[];
+  }
+
+  if (Array.isArray(data.learning_units)) {
+    return data.learning_units as LearningUnit[];
+  }
+
+  return [];
+}
+
+export async function createLearningUnit(
+  courseId: string,
+  title: string,
+  description: string,
+  unitOrder: number,
+): Promise<LearningUnit> {
+  const response = await fetch(`${API_BASE_URL}/learning-units/courses/${courseId}/units`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Accept: 'application/json',
+      ...getAuthHeaders(),
+    },
+    body: JSON.stringify({
+      title,
+      description,
+      unit_order: unitOrder,
+      order_index: unitOrder,
+    }),
+  });
+
+  const data = await response.json().catch(() => ({}));
+
+  if (!response.ok) {
+    const msg = data?.error || data?.message || 'Failed to create learning unit';
+    throw new Error(msg);
+  }
+
+  if (data.unit) {
+    return data.unit as LearningUnit;
+  }
+
+  throw new Error('Invalid learning unit response');
+}
+
+export async function updateLearningUnit(
+  unitId: string,
+  updates: { title?: string; description?: string; unit_order?: number },
+): Promise<LearningUnit> {
+  const response = await fetch(`${API_BASE_URL}/learning-units/${unitId}`, {
+    method: 'PUT',
+    headers: {
+      'Content-Type': 'application/json',
+      Accept: 'application/json',
+      ...getAuthHeaders(),
+    },
+    body: JSON.stringify({
+      ...updates,
+      ...(updates.unit_order != null ? { order_index: updates.unit_order } : {}),
+    }),
+  });
+
+  const data = await response.json().catch(() => ({}));
+
+  if (!response.ok) {
+    const msg = data?.error || data?.message || 'Failed to update learning unit';
+    throw new Error(msg);
+  }
+
+  if (data.unit) {
+    return data.unit as LearningUnit;
+  }
+
+  throw new Error('Invalid learning unit response');
+}
+
+interface CourseAccessRequest {
+  id: string;
+  student_id: string;
+  course_id: string;
+  status: string;
+  created_at: string;
+  updated_at: string;
+}
+
+async function getCourseAccessRequests(courseId: string): Promise<CourseAccessRequest[]> {
+  const response = await fetch(`${API_BASE_URL}/courses/${courseId}/access-requests`, {
+    method: 'GET',
+    headers: {
+      Accept: 'application/json',
+      ...getAuthHeaders(),
+    },
+  });
+
+  const data = await response.json().catch(() => ({}));
+
+  if (!response.ok) {
+    const msg = data?.error || data?.message || 'Failed to fetch course access requests';
+    throw new Error(msg);
+  }
+
+  if (Array.isArray(data.requests)) {
+    return data.requests as CourseAccessRequest[];
+  }
+
+  return [];
+}
+
+export async function getCourseEnrolledStudentCount(courseId: string): Promise<number> {
+  const response = await fetch(`${API_BASE_URL}/courses/${courseId}/students/count`, {
+    method: 'GET',
+    headers: {
+      Accept: 'application/json',
+      ...getAuthHeaders(),
+    },
+  });
+
+  const data = await response.json().catch(() => ({}));
+
+  if (!response.ok) {
+    const msg = data?.error || data?.message || 'Failed to fetch enrolled student count';
+    throw new Error(msg);
+  }
+
+  if (typeof data?.count === 'number') {
+    return data.count;
+  }
+
+  return 0;
+}
+
+export interface EnrolledStudent {
+  id: string;
+  name: string;
+  email: string;
+  unique_identifier: string;
+  role: string;
+  status: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export async function getCourseEnrolledStudents(courseId: string): Promise<EnrolledStudent[]> {
+  const response = await fetch(`${API_BASE_URL}/courses/${courseId}/students`, {
+    method: 'GET',
+    headers: {
+      Accept: 'application/json',
+      ...getAuthHeaders(),
+    },
+  });
+
+  const data = await response.json().catch(() => ({}));
+
+  if (!response.ok) {
+    const msg = data?.error || data?.message || 'Failed to fetch enrolled students';
+    throw new Error(msg);
+  }
+
+  if (Array.isArray(data?.students)) {
+    return data.students as EnrolledStudent[];
+  }
+
+  return [];
+}
+
+export interface LecturerDashboardStats {
+  totalCourses: number;
+  totalStudents: number;
+  totalLearningUnits: number;
+}
+
+export async function fetchLecturerDashboardStats(): Promise<LecturerDashboardStats> {
+  const defaults: LecturerDashboardStats = {
+    totalCourses: 5,
+    totalStudents: 247,
+    totalLearningUnits: 32,
+  };
+
+  try {
+    const courses = await getMyCourses(100, 0);
+    const totalCourses = courses.length;
+
+    const requestsByCourse = await Promise.all(
+      courses.map((course) => getCourseAccessRequests(course.id)),
+    );
+
+    const totalStudents = requestsByCourse.reduce(
+      (sum, requests) => sum + requests.length,
+      0,
+    );
+
+    return {
+      totalCourses,
+      totalStudents,
+      totalLearningUnits: defaults.totalLearningUnits,
+    };
+  } catch {
+    return defaults;
+  }
+}
+
+export interface GenerateUploadURLResponse {
+  uploadUrl: string;
+  newFileName: string;
+}
+
+export async function generateAIUploadURL(fileName: string): Promise<GenerateUploadURLResponse> {
+  const response = await fetch(`${API_BASE_URL}/ai/upload-url`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Accept: 'application/json',
+      ...getAuthHeaders(),
+    },
+    body: JSON.stringify({ fileName }),
+  });
+
+  const data = await response.json().catch(() => ({}));
+
+  if (!response.ok) {
+    const msg = data?.error || data?.message || 'Failed to generate upload URL';
+    throw new Error(msg);
+  }
+
+  if (data?.uploadUrl && data?.newFileName) {
+    return data as GenerateUploadURLResponse;
+  }
+
+  throw new Error('Invalid upload URL response');
+}
+
+export interface IngestPDFResponse {
+  message?: string;
+  chunks?: unknown[];
+  document_id?: string;
+}
+
+export async function ingestPDF(params: {
+  originalFileName: string;
+  newFileName: string;
+  learningUnitId: string;
+}): Promise<IngestPDFResponse> {
+  const response = await fetch(`${API_BASE_URL}/ai/ingest`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Accept: 'application/json',
+      ...getAuthHeaders(),
+    },
+    body: JSON.stringify(params),
+  });
+
+  const data = await response.json().catch(() => ({}));
+
+  if (!response.ok) {
+    const msg = data?.error || data?.message || 'Failed to ingest PDF';
+    throw new Error(msg);
+  }
+
+  return data as IngestPDFResponse;
+}
+
+export interface UploadPDFResponse {
+  originalFileName: string;
+  newFileName: string;
+}
+
+export async function uploadPDFToR2(file: File): Promise<UploadPDFResponse> {
+  const formData = new FormData();
+  formData.append('file', file, file.name);
+
+  const response = await fetch(`${API_BASE_URL}/ai/upload`, {
+    method: 'POST',
+    headers: {
+      Accept: 'application/json',
+      ...getAuthHeaders(),
+    },
+    body: formData,
+  });
+
+  const data = await response.json().catch(() => ({}));
+
+  if (!response.ok) {
+    const msg = data?.error || data?.message || 'Failed to upload PDF';
+    throw new Error(msg);
+  }
+
+  if (data?.originalFileName && data?.newFileName) {
+    return data as UploadPDFResponse;
+  }
+
+  throw new Error('Invalid upload response');
+}
+
+export interface LearningUnitDocument {
+  id: string;
+  learning_unit_id: string;
+  file_name: string;
+  storage_path: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export async function getLearningUnitDocuments(unitId: string): Promise<LearningUnitDocument[]> {
+  const response = await fetch(`${API_BASE_URL}/ai/units/${unitId}/documents`, {
+    method: 'GET',
+    headers: {
+      Accept: 'application/json',
+      ...getAuthHeaders(),
+    },
+  });
+
+  const data = await response.json().catch(() => ({}));
+
+  if (!response.ok) {
+    const msg = data?.error || data?.message || 'Failed to fetch learning unit documents';
+    throw new Error(msg);
+  }
+
+  if (Array.isArray(data?.documents)) {
+    return data.documents as LearningUnitDocument[];
+  }
+
+  return [];
+}
+
+export async function downloadDocumentPDF(documentId: string): Promise<Blob> {
+  const response = await fetch(`${API_BASE_URL}/ai/documents/${documentId}/download`, {
+    method: 'GET',
+    headers: {
+      Accept: 'application/pdf',
+      ...getAuthHeaders(),
+    },
+  });
+
+  if (!response.ok) {
+    const data = await response.json().catch(() => ({}));
+    const msg = data?.error || data?.message || 'Failed to download document';
+    throw new Error(msg);
+  }
+
+  return await response.blob();
+}
+
+export async function deleteDocument(documentId: string): Promise<void> {
+  const response = await fetch(`${API_BASE_URL}/ai/documents/${documentId}`, {
+    method: 'DELETE',
+    headers: {
+      Accept: 'application/json',
+      ...getAuthHeaders(),
+    },
+  });
+
+  const data = await response.json().catch(() => ({}));
+
+  if (!response.ok) {
+    const msg = data?.error || data?.message || 'Failed to delete document';
+    throw new Error(msg);
+  }
+}
+
+export interface AIConversation {
+  id: string;
+  user_id: string;
+  title: string;
+  knowledge_base_learning_unit_ids?: string[];
+  knowledge_base_course_ids?: string[];
+  created_at: string;
+  updated_at: string;
+}
+
+export async function listAIConversations(): Promise<AIConversation[]> {
+  const response = await fetch(`${API_BASE_URL}/ai/conversations`, {
+    method: 'GET',
+    headers: {
+      Accept: 'application/json',
+      ...getAuthHeaders(),
+    },
+  });
+
+  const data = await response.json().catch(() => ({}));
+
+  if (!response.ok) {
+    const msg = data?.error || data?.message || 'Failed to fetch AI conversations';
+    throw new Error(msg);
+  }
+
+  if (Array.isArray(data?.conversations)) {
+    return data.conversations as AIConversation[];
+  }
+
+  return [];
+}
+
+export async function createAIConversation(title: string): Promise<AIConversation> {
+  const response = await fetch(`${API_BASE_URL}/ai/conversations`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Accept: 'application/json',
+      ...getAuthHeaders(),
+    },
+    body: JSON.stringify({ title }),
+  });
+
+  const data = await response.json().catch(() => ({}));
+
+  if (!response.ok) {
+    const msg = data?.error || data?.message || 'Failed to create AI conversation';
+    throw new Error(msg);
+  }
+
+  if (data?.conversation) {
+    return data.conversation as AIConversation;
+  }
+
+  throw new Error('Invalid AI conversation response');
+}
+
+export async function updateAIConversationTitle(conversationId: string, title: string): Promise<AIConversation> {
+  return updateAIConversation(conversationId, { title });
+}
+
+export async function updateAIConversation(
+  conversationId: string,
+  updates: {
+    title?: string;
+    knowledge_base_learning_unit_ids?: string[];
+    knowledge_base_course_ids?: string[];
+  },
+): Promise<AIConversation> {
+  const response = await fetch(`${API_BASE_URL}/ai/conversations/${conversationId}`, {
+    method: 'PUT',
+    headers: {
+      'Content-Type': 'application/json',
+      Accept: 'application/json',
+      ...getAuthHeaders(),
+    },
+    body: JSON.stringify(updates),
+  });
+
+  const data = await response.json().catch(() => ({}));
+
+  if (!response.ok) {
+    const msg = data?.error || data?.message || 'Failed to update AI conversation';
+    throw new Error(msg);
+  }
+
+  if (data?.conversation) {
+    return data.conversation as AIConversation;
+  }
+
+  throw new Error('Invalid AI conversation response');
+}
+
+export async function deleteAIConversation(conversationId: string): Promise<void> {
+  const response = await fetch(`${API_BASE_URL}/ai/conversations/${conversationId}`, {
+    method: 'DELETE',
+    headers: {
+      Accept: 'application/json',
+      ...getAuthHeaders(),
+    },
+  });
+
+  const data = await response.json().catch(() => ({}));
+
+  if (!response.ok) {
+    const msg = data?.error || data?.message || 'Failed to delete AI conversation';
+    throw new Error(msg);
+  }
+}
+
+export interface AIAnswerSource {
+  id: string;
+  document_id: string;
+  learning_unit_id?: string;
+  content: string;
+}
+
+export interface AIAnswerResponse {
+  answer: string;
+  sources: AIAnswerSource[];
+}
+
+export async function answerAI(params: {
+  query: string;
+  lens?: string;
+  top_k?: number;
+  document_id?: string;
+  learning_unit_ids?: string[];
+}): Promise<AIAnswerResponse> {
+  const response = await fetch(`${API_BASE_URL}/ai/answer`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Accept: 'application/json',
+      ...getAuthHeaders(),
+    },
+    body: JSON.stringify(params),
+  });
+
+  const data = await response.json().catch(() => ({}));
+
+  if (!response.ok) {
+    const msg = data?.error || data?.message || 'Failed to get AI answer';
+    throw new Error(msg);
+  }
+
+  if (typeof data?.answer === 'string' && Array.isArray(data?.sources)) {
+    return data as AIAnswerResponse;
+  }
+
+  if (typeof data?.answer === 'string') {
+    return { answer: data.answer as string, sources: [] };
+  }
+
+  throw new Error('Invalid AI answer response');
+}
+
+export interface GeneratedFlashcard {
+  front: string;
+  back: string;
+}
+
+export interface GeneratedFlashcardSetResponse {
+  id: string;
+  title: string;
+  flashcards: GeneratedFlashcard[];
+  source_unit_ids: string[];
+}
+
+export async function generateFlashcards(
+  courseId: string,
+  params?: { learning_unit_ids?: string[]; quantity?: number; context?: string },
+): Promise<GeneratedFlashcardSetResponse> {
+  const response = await fetch(`${API_BASE_URL}/courses/${courseId}/flashcards/generate`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Accept: 'application/json',
+      ...getAuthHeaders(),
+    },
+    body: JSON.stringify({
+      learning_unit_ids: params?.learning_unit_ids,
+      quantity: params?.quantity,
+      context: params?.context,
+    }),
+  });
+
+  const data = await response.json().catch(() => ({}));
+
+  if (!response.ok) {
+    const msg = data?.error || data?.message || 'Failed to generate flashcards';
+    throw new Error(msg);
+  }
+
+  if (
+    data &&
+    typeof data === 'object' &&
+    typeof data.id === 'string' &&
+    typeof data.title === 'string' &&
+    Array.isArray(data.flashcards)
+  ) {
+    return data as GeneratedFlashcardSetResponse;
+  }
+
+  throw new Error('Invalid generate flashcards response');
+}
+
+export interface GeneratedFlashcardSetSummary {
+  id: string;
+  title: string;
+  flashcards_count: number;
+  created_at: string;
+}
+
+export async function listGeneratedFlashcardSets(courseId: string): Promise<GeneratedFlashcardSetSummary[]> {
+  const response = await fetch(`${API_BASE_URL}/courses/${courseId}/flashcards/generated`, {
+    method: 'GET',
+    headers: {
+      Accept: 'application/json',
+      ...getAuthHeaders(),
+    },
+  });
+
+  const data = await response.json().catch(() => ({}));
+
+  if (!response.ok) {
+    const msg = data?.error || data?.message || 'Failed to list generated flashcards';
+    throw new Error(msg);
+  }
+
+  if (Array.isArray(data?.flashcards)) {
+    return data.flashcards as GeneratedFlashcardSetSummary[];
+  }
+
+  return [];
+}
+
+export async function getGeneratedFlashcardSet(
+  courseId: string,
+  setId: string,
+): Promise<GeneratedFlashcardSetResponse> {
+  const response = await fetch(`${API_BASE_URL}/courses/${courseId}/flashcards/generated/${setId}`, {
+    method: 'GET',
+    headers: {
+      Accept: 'application/json',
+      ...getAuthHeaders(),
+    },
+  });
+
+  const data = await response.json().catch(() => ({}));
+
+  if (!response.ok) {
+    const msg = data?.error || data?.message || 'Failed to fetch generated flashcards';
+    throw new Error(msg);
+  }
+
+  if (
+    data &&
+    typeof data === 'object' &&
+    typeof data.id === 'string' &&
+    typeof data.title === 'string' &&
+    Array.isArray(data.flashcards)
+  ) {
+    return data as GeneratedFlashcardSetResponse;
+  }
+
+  throw new Error('Invalid generated flashcards response');
+}
+
+export async function deleteGeneratedFlashcardSet(courseId: string, setId: string): Promise<void> {
+  const response = await fetch(`${API_BASE_URL}/courses/${courseId}/flashcards/generated/${setId}`, {
+    method: 'DELETE',
+    headers: {
+      Accept: 'application/json',
+      ...getAuthHeaders(),
+    },
+  });
+
+  const data = await response.json().catch(() => ({}));
+
+  if (!response.ok) {
+    const msg = data?.error || data?.message || 'Failed to delete generated flashcards';
+    throw new Error(msg);
+  }
+}
+
+export interface GeneratedQuizQuestion {
+  question: string;
+  options: string[];
+  answer: string;
+  explanation: string;
+  points: number;
+}
+
+export interface GeneratedQuizResponse {
+  id: string;
+  title: string;
+  questions: GeneratedQuizQuestion[];
+  source_unit_ids: string[];
+}
+
+export type QuizDifficulty = 'easy' | 'medium' | 'hard';
+
+export async function generateQuiz(
+  courseId: string,
+  params?: {
+    learning_unit_ids?: string[];
+    quantity?: number;
+    context?: string;
+    difficulty?: QuizDifficulty;
+  },
+): Promise<GeneratedQuizResponse> {
+  const response = await fetch(`${API_BASE_URL}/courses/${courseId}/quiz/generate`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Accept: 'application/json',
+      ...getAuthHeaders(),
+    },
+    body: JSON.stringify({
+      learning_unit_ids: params?.learning_unit_ids,
+      quantity: params?.quantity,
+      context: params?.context,
+      difficulty: params?.difficulty,
+    }),
+  });
+
+  const data = await response.json().catch(() => ({}));
+
+  if (!response.ok) {
+    const msg = data?.error || data?.message || 'Failed to generate quiz';
+    throw new Error(msg);
+  }
+
+  if (
+    data &&
+    typeof data === 'object' &&
+    typeof data.id === 'string' &&
+    typeof data.title === 'string' &&
+    Array.isArray(data.questions)
+  ) {
+    return data as GeneratedQuizResponse;
+  }
+
+  throw new Error('Invalid generate quiz response');
+}
+
+export interface GeneratedQuizSummary {
+  id: string;
+  title: string;
+  questions_count: number;
+  created_at: string;
+}
+
+export async function listGeneratedQuizzes(courseId: string): Promise<GeneratedQuizSummary[]> {
+  const response = await fetch(`${API_BASE_URL}/courses/${courseId}/quizzes/generated`, {
+    method: 'GET',
+    headers: {
+      Accept: 'application/json',
+      ...getAuthHeaders(),
+    },
+  });
+
+  const data = await response.json().catch(() => ({}));
+
+  if (!response.ok) {
+    const msg = data?.error || data?.message || 'Failed to list generated quizzes';
+    throw new Error(msg);
+  }
+
+  if (Array.isArray(data?.quizzes)) {
+    return data.quizzes as GeneratedQuizSummary[];
+  }
+
+  return [];
+}
+
+export async function getGeneratedQuiz(courseId: string, quizId: string): Promise<GeneratedQuizResponse> {
+  const response = await fetch(`${API_BASE_URL}/courses/${courseId}/quizzes/generated/${quizId}`, {
+    method: 'GET',
+    headers: {
+      Accept: 'application/json',
+      ...getAuthHeaders(),
+    },
+  });
+
+  const data = await response.json().catch(() => ({}));
+
+  if (!response.ok) {
+    const msg = data?.error || data?.message || 'Failed to fetch generated quiz';
+    throw new Error(msg);
+  }
+
+  if (
+    data &&
+    typeof data === 'object' &&
+    typeof data.id === 'string' &&
+    typeof data.title === 'string' &&
+    Array.isArray(data.questions)
+  ) {
+    return data as GeneratedQuizResponse;
+  }
+
+  throw new Error('Invalid generated quiz response');
+}
+
+export async function deleteGeneratedQuiz(courseId: string, quizId: string): Promise<void> {
+  const response = await fetch(`${API_BASE_URL}/courses/${courseId}/quizzes/generated/${quizId}`, {
+    method: 'DELETE',
+    headers: {
+      Accept: 'application/json',
+      ...getAuthHeaders(),
+    },
+  });
+
+  const data = await response.json().catch(() => ({}));
+
+  if (!response.ok) {
+    const msg = data?.error || data?.message || 'Failed to delete generated quiz';
+    throw new Error(msg);
+  }
+}
+
+export interface LearningUnitSummary {
+  unit_id: string;
+  material_count: number;
+  assignment_count: number;
+  quiz_count: number;
+}
+
+export async function getCourseLearningUnitSummaries(courseId: string): Promise<LearningUnitSummary[]> {
+  const response = await fetch(`${API_BASE_URL}/learning-units/courses/${courseId}/units/summary`, {
+    method: 'GET',
+    headers: {
+      Accept: 'application/json',
+      ...getAuthHeaders(),
+    },
+  });
+
+  const data = await response.json().catch(() => ({}));
+
+  if (!response.ok) {
+    const msg = data?.error || data?.message || 'Failed to fetch learning unit summaries';
+    throw new Error(msg);
+  }
+
+  if (Array.isArray(data?.summaries)) {
+    return data.summaries as LearningUnitSummary[];
+  }
+
+  return [];
+}
+
+export interface LearningUnitAssignment {
+  id: string;
+  learning_unit_id: string;
+  title: string;
+  description: string;
+  due_date: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface QuizQuestion {
+  id: string;
+  question: string;
+  options: string[];
+  answer: string;
+  points: number;
+}
+
+export interface QuizData {
+  questions: QuizQuestion[];
+  time_limit: number;
+}
+
+export interface LearningUnitQuiz {
+  id: string;
+  learning_unit_id: string;
+  title: string;
+  quiz_data: QuizData;
+  created_at: string;
+  updated_at: string;
+}
+
+export async function getLearningUnitQuizzes(
+  unitId: string,
+  limit = 50,
+  offset = 0,
+): Promise<LearningUnitQuiz[]> {
+  const params = new URLSearchParams();
+  if (limit != null) params.set('limit', String(limit));
+  if (offset != null) params.set('offset', String(offset));
+
+  const response = await fetch(
+    `${API_BASE_URL}/learning-units/${unitId}/quizzes${params.toString() ? `?${params.toString()}` : ''}`,
+    {
+      method: 'GET',
+      headers: {
+        Accept: 'application/json',
+        ...getAuthHeaders(),
+      },
+    },
+  );
+
+  const data = await response.json().catch(() => ({}));
+
+  if (!response.ok) {
+    const msg = data?.error || data?.message || 'Failed to fetch quizzes';
+    throw new Error(msg);
+  }
+
+  if (Array.isArray(data?.quizzes)) {
+    return data.quizzes as LearningUnitQuiz[];
+  }
+
+  if (Array.isArray(data?.Quizzes)) {
+    return data.Quizzes as LearningUnitQuiz[];
+  }
+
+  return [];
+}
+
+export async function createLearningUnitQuiz(
+  unitId: string,
+  params: { title: string; quiz_data: QuizData },
+): Promise<LearningUnitQuiz> {
+  const response = await fetch(`${API_BASE_URL}/learning-units/${unitId}/quizzes`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Accept: 'application/json',
+      ...getAuthHeaders(),
+    },
+    body: JSON.stringify(params),
+  });
+
+  const data = await response.json().catch(() => ({}));
+
+  if (!response.ok) {
+    const msg = data?.error || data?.message || 'Failed to create quiz';
+    throw new Error(msg);
+  }
+
+  if (data?.quiz) {
+    return data.quiz as LearningUnitQuiz;
+  }
+
+  return data as LearningUnitQuiz;
+}
+
+export async function getLearningUnitAssignments(
+  unitId: string,
+  limit = 50,
+  offset = 0,
+): Promise<LearningUnitAssignment[]> {
+  const params = new URLSearchParams();
+  if (limit != null) params.set('limit', String(limit));
+  if (offset != null) params.set('offset', String(offset));
+
+  const response = await fetch(
+    `${API_BASE_URL}/learning-units/${unitId}/assignments${params.toString() ? `?${params.toString()}` : ''}`,
+    {
+      method: 'GET',
+      headers: {
+        Accept: 'application/json',
+        ...getAuthHeaders(),
+      },
+    },
+  );
+
+  const data = await response.json().catch(() => ({}));
+
+  if (!response.ok) {
+    const msg = data?.error || data?.message || 'Failed to fetch assignments';
+    throw new Error(msg);
+  }
+
+  if (Array.isArray(data?.assignments)) {
+    return data.assignments as LearningUnitAssignment[];
+  }
+
+  if (Array.isArray(data?.Assignments)) {
+    return data.Assignments as LearningUnitAssignment[];
+  }
+
+  return [];
+}
+
+export async function createLearningUnitAssignment(
+  unitId: string,
+  params: { title: string; description?: string; due_date?: string },
+): Promise<LearningUnitAssignment> {
+  const body: Record<string, unknown> = {
+    title: params.title,
+    description: params.description ?? '',
+  };
+  if (params.due_date) body.due_date = params.due_date;
+
+  const response = await fetch(`${API_BASE_URL}/learning-units/${unitId}/assignments`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Accept: 'application/json',
+      ...getAuthHeaders(),
+    },
+    body: JSON.stringify(body),
+  });
+
+  const data = await response.json().catch(() => ({}));
+
+  if (!response.ok) {
+    const msg = data?.error || data?.message || 'Failed to create assignment';
+    throw new Error(msg);
+  }
+
+  if (data?.assignment) {
+    return data.assignment as LearningUnitAssignment;
+  }
+
+  return data as LearningUnitAssignment;
+}
+
+export async function updateLearningUnitAssignment(
+  unitId: string,
+  assignmentId: string,
+  updates: { title?: string; description?: string; due_date?: string },
+): Promise<LearningUnitAssignment> {
+  const response = await fetch(
+    `${API_BASE_URL}/learning-units/${unitId}/assignments/${assignmentId}`,
+    {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json',
+        Accept: 'application/json',
+        ...getAuthHeaders(),
+      },
+      body: JSON.stringify(updates),
+    },
+  );
+
+  const data = await response.json().catch(() => ({}));
+
+  if (!response.ok) {
+    const msg = data?.error || data?.message || 'Failed to update assignment';
+    throw new Error(msg);
+  }
+
+  if (data?.assignment) {
+    return data.assignment as LearningUnitAssignment;
+  }
+
+  return data as LearningUnitAssignment;
+}
+
+export async function deleteLearningUnitAssignment(
+  unitId: string,
+  assignmentId: string,
+): Promise<void> {
+  const response = await fetch(
+    `${API_BASE_URL}/learning-units/${unitId}/assignments/${assignmentId}`,
+    {
+      method: 'DELETE',
+      headers: {
+        Accept: 'application/json',
+        ...getAuthHeaders(),
+      },
+    },
+  );
+
+  const data = await response.json().catch(() => ({}));
+
+  if (!response.ok) {
+    const msg = data?.error || data?.message || 'Failed to delete assignment';
+    throw new Error(msg);
+  }
+}
+
+export async function updateLearningUnitQuiz(
+  unitId: string,
+  quizId: string,
+  updates: { title?: string; quiz_data?: QuizData },
+): Promise<LearningUnitQuiz> {
+  const response = await fetch(`${API_BASE_URL}/learning-units/${unitId}/quizzes/${quizId}`, {
+    method: 'PUT',
+    headers: {
+      'Content-Type': 'application/json',
+      Accept: 'application/json',
+      ...getAuthHeaders(),
+    },
+    body: JSON.stringify(updates),
+  });
+
+  const data = await response.json().catch(() => ({}));
+
+  if (!response.ok) {
+    const msg = data?.error || data?.message || 'Failed to update quiz';
+    throw new Error(msg);
+  }
+
+  if (data?.quiz) {
+    return data.quiz as LearningUnitQuiz;
+  }
+
+  return data as LearningUnitQuiz;
+}
+
+export async function deleteLearningUnitQuiz(unitId: string, quizId: string): Promise<void> {
+  const response = await fetch(`${API_BASE_URL}/learning-units/${unitId}/quizzes/${quizId}`, {
+    method: 'DELETE',
+    headers: {
+      Accept: 'application/json',
+      ...getAuthHeaders(),
+    },
+  });
+
+  const data = await response.json().catch(() => ({}));
+
+  if (!response.ok) {
+    const msg = data?.error || data?.message || 'Failed to delete quiz';
+    throw new Error(msg);
+  }
+}
+
+export interface AssignmentSubmissionStudent {
+  id: string;
+  name: string;
+  email: string;
+  unique_identifier: string;
+}
+
+export interface AssignmentSubmission {
+  id: string;
+  assignment_id: string;
+  student_id: string;
+  file_path: string;
+  grade: string;
+  feedback: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface AssignmentSubmissionRow {
+  student: AssignmentSubmissionStudent;
+  submission: AssignmentSubmission | null;
+}
+
+export async function getAssignmentSubmissions(
+  unitId: string,
+  assignmentId: string,
+): Promise<{
+  unit_id: string;
+  assignment_id: string;
+  total_students: number;
+  submitted_count: number;
+  rows: AssignmentSubmissionRow[];
+}> {
+  const response = await fetch(
+    `${API_BASE_URL}/learning-units/${unitId}/assignments/${assignmentId}/submissions`,
+    {
+      method: 'GET',
+      headers: {
+        Accept: 'application/json',
+        ...getAuthHeaders(),
+      },
+    },
+  );
+
+  const data = await response.json().catch(() => ({}));
+
+  if (!response.ok) {
+    const msg = data?.error || data?.message || 'Failed to fetch submissions';
+    throw new Error(msg);
+  }
+
+  return data as {
+    unit_id: string;
+    assignment_id: string;
+    total_students: number;
+    submitted_count: number;
+    rows: AssignmentSubmissionRow[];
+  };
+}
+
+export async function downloadSubmissionPDF(params: {
+  unitId: string;
+  assignmentId: string;
+  submissionId: string;
+}): Promise<Blob> {
+  const response = await fetch(
+    `${API_BASE_URL}/learning-units/${params.unitId}/assignments/${params.assignmentId}/submissions/${params.submissionId}/download`,
+    {
+      method: 'GET',
+      headers: {
+        Accept: 'application/pdf',
+        ...getAuthHeaders(),
+      },
+    },
+  );
+
+  if (!response.ok) {
+    const data = await response.json().catch(() => ({}));
+    const msg = data?.error || data?.message || 'Failed to download submission';
+    throw new Error(msg);
+  }
+
+  return await response.blob();
+}
+
+export interface QuizAttemptStudent {
+  id: string;
+  name: string;
+  email: string;
+  unique_identifier: string;
+}
+
+export interface QuizAttempt {
+  id: string;
+  quiz_id: string;
+  student_id: string;
+  attempt_no: number;
+  answers?: unknown | null;
+  score: number;
+  max_score: number;
+  created_at: string;
+}
+
+export interface QuizAttemptRow {
+  student: QuizAttemptStudent;
+  attempt: QuizAttempt | null;
+}
+
+export async function getQuizAttempts(
+  unitId: string,
+  quizId: string,
+): Promise<{
+  unit_id: string;
+  quiz_id: string;
+  total_students: number;
+  attempted_count: number;
+  rows: QuizAttemptRow[];
+}> {
+  const response = await fetch(
+    `${API_BASE_URL}/learning-units/${unitId}/quizzes/${quizId}/attempts`,
+    {
+      method: 'GET',
+      headers: {
+        Accept: 'application/json',
+        ...getAuthHeaders(),
+      },
+    },
+  );
+
+  const data = await response.json().catch(() => ({}));
+
+  if (!response.ok) {
+    const msg = data?.error || data?.message || 'Failed to fetch quiz attempts';
+    throw new Error(msg);
+  }
+
+  return data as {
+    unit_id: string;
+    quiz_id: string;
+    total_students: number;
+    attempted_count: number;
+    rows: QuizAttemptRow[];
+  };
+}

@@ -1,0 +1,17 @@
+{
+  "name": "@layai/utils",
+  "version": "0.0.0",
+  "private": true,
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "scripts": {
+    "build": "bun build index.ts --outdir dist --target node",
+    "dev": "bun run tsc --watch",
+    "lint": "eslint .",
+    "type-check": "bun run tsc --noEmit"
+  },
+  "devDependencies": {
+    "eslint": "^8.0.0",
+    "typescript": "^5.0.0"
+  }
+}
