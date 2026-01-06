@@ -1740,6 +1740,7 @@ export default function CourseDetailPage() {
                                       />
                                       <Button
                                         variant="outline"
+                                        className="border-[#E80004] bg-[#E80004]/[0.38] hover:bg-[#E80004]/[0.45] hover:text-[#E80004]"
                                         onClick={() => removeOption(q.id, optionIndex)}
                                         disabled={quizSaving || q.options.length <= 2}
                                       >
@@ -1887,23 +1888,19 @@ export default function CourseDetailPage() {
 
                     <div className="flex flex-wrap items-center gap-x-6 gap-y-2 text-sm text-zinc-600">
                       <div className="inline-flex items-center gap-2">
-                        <FileText className="h-4 w-4 text-zinc-500" />
+                        <FileText className="h-4 w-4 text-[#BB8626]" />
                         <span className="font-medium">{materialsCount}</span>
                         <span>Materials</span>
                       </div>
                       <div className="inline-flex items-center gap-2">
-                        <ClipboardList className="h-4 w-4 text-zinc-500" />
+                        <ClipboardList className="h-4 w-4 text-[#19A249]" />
                         <span className="font-medium">{assignmentsCount}</span>
                         <span>Assignments</span>
                       </div>
                       <div className="inline-flex items-center gap-2">
-                        <HelpCircle className="h-4 w-4 text-zinc-500" />
+                        <HelpCircle className="h-4 w-4 text-[#FB3F50]" />
                         <span className="font-medium">{quizzesCount}</span>
                         <span>Quizzes</span>
-                      </div>
-                      <div className="inline-flex items-center gap-2">
-                        <Users className="h-4 w-4 text-zinc-500" />
-                        <span>{studentsLabel} Students</span>
                       </div>
                     </div>
                   </div>
@@ -1921,6 +1918,12 @@ export default function CourseDetailPage() {
                       ).map((t) => {
                         const isActive = activeTab === t.key;
                         const Icon = t.icon;
+                        const iconColorClass =
+                          t.key === 'materials'
+                            ? 'text-[#BB8626]'
+                            : t.key === 'assignments'
+                              ? 'text-[#19A249]'
+                              : 'text-[#FB3F50]';
                         return (
                           <button
                             key={t.key}
@@ -1930,7 +1933,7 @@ export default function CourseDetailPage() {
                               isActive ? 'text-zinc-900' : 'text-zinc-600 hover:text-zinc-900'
                             }`}
                           >
-                            <Icon className="h-4 w-4" />
+                            <Icon className={`h-4 w-4 ${iconColorClass}`} />
                             <span>{t.label}</span>
                             <span className="rounded-full bg-zinc-200 px-2 py-0.5 text-xs font-semibold text-zinc-700">
                               {t.count}

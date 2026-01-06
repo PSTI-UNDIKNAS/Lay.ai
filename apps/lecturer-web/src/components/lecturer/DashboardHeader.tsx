@@ -1,4 +1,4 @@
-import { BarChart3, ClipboardList } from 'lucide-react'
+import { BarChart3 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
 export default function DashboardHeader({ name }: { name?: string }) {
@@ -15,7 +15,6 @@ export default function DashboardHeader({ name }: { name?: string }) {
 
       <div className="flex items-center gap-6">
         <TabItem active icon={<BarChart3 className="h-4 w-4" />}>Overview</TabItem>
-        <TabItem icon={<ClipboardList className="h-4 w-4" />}>Submissions</TabItem>
       </div>
     </div>
   )
@@ -23,6 +22,14 @@ export default function DashboardHeader({ name }: { name?: string }) {
 
 function TabItem({ children, icon, active }: { children: React.ReactNode; icon?: React.ReactNode; active?: boolean }) {
   return (
-    <div className={cn('flex items-center gap-2 pb-3 text-sm font-medium', active ? 'text-zinc-900 border-b-2 border-zinc-900' : 'text-zinc-600')}>{icon}{children}</div>
+    <div
+      className={cn(
+        'flex items-center gap-2 pb-3 text-sm font-medium',
+        active ? 'text-[#1F3A89] border-b-2 border-[#5277DE]' : 'text-zinc-600',
+      )}
+    >
+      {icon}
+      {children}
+    </div>
   )
 }
