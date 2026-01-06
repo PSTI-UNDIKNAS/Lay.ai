@@ -149,6 +149,72 @@ func (h *AuthHandler) LoginUserHandler(c *gin.Context) {
 	})
 }
 
+// LoginAdminHandler handles POST /api/auth/admin/login
+func (h *AuthHandler) LoginAdminHandler(c *gin.Context) {
+	var req models.LoginRequest
+
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"error":   "Invalid request data",
+			"details": err.Error(),
+		})
+		return
+	}
+
+	if req.Email == "" || req.Password == "" {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"error": "Email and password are required",
+		})
+		return
+	}
+
+	loginResponse, err := h.authService.LoginUser(req.Email, req.Password)
+	if err != nil {
+		if errors.Is(err, services.ErrPendingApproval) {
+			c.JSON(http.StatusForbidden, gin.H{
+				"error": "Your account is pending approval. Please wait for admin approval.",
+			})
+			return
+		}
+		if errors.Is(err, services.ErrInactiveAccount) {
+			c.JSON(http.StatusForbidden, gin.H{
+				"error": "Your account is inactive. Please contact an administrator.",
+			})
+			return
+		}
+		if errors.Is(err, services.ErrInvalidCredentials) {
+			c.JSON(http.StatusUnauthorized, gin.H{
+				"error": "Invalid email or password",
+			})
+			return
+		}
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"error": "Failed to login",
+		})
+		return
+	}
+
+	if loginResponse.User.Role != models.RoleAdmin {
+		c.JSON(http.StatusForbidden, gin.H{
+			"error": "Admin access required",
+		})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"message": "Login successful",
+		"token":   loginResponse.Token,
+		"user": gin.H{
+			"id":                loginResponse.User.ID,
+			"name":              loginResponse.User.Name,
+			"email":             loginResponse.User.Email,
+			"unique_identifier": loginResponse.User.UniqueIdentifier,
+			"role":              loginResponse.User.Role,
+			"status":            loginResponse.User.Status,
+		},
+	})
+}
+
 // GetMeHandler handles GET /api/auth/me
 func (h *AuthHandler) GetMeHandler(c *gin.Context) {
 	// Extract user information from context (set by AuthMiddleware)
