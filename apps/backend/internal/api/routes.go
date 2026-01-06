@@ -91,6 +91,7 @@ func SetupRoutes(db *pgxpool.Pool) *gin.Engine {
 		{
 			auth.POST("/register", authHandler.RegisterUserHandler)
 			auth.POST("/login", authHandler.LoginUserHandler)
+			auth.POST("/admin/login", authHandler.LoginAdminHandler)
 			auth.GET("/me", middleware.AuthWithStatusMiddleware(authService), authHandler.GetMeHandler)
 			auth.POST("/logout", middleware.AuthWithStatusMiddleware(authService), authHandler.LogoutHandler)
 		}

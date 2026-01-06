@@ -18,7 +18,7 @@ export interface ApiError {
 }
 
 export async function login(email: string, password: string): Promise<LoginResponse> {
-  const response = await fetch(`${API_BASE_URL}/auth/login`, {
+  const response = await fetch(`${API_BASE_URL}/auth/admin/login`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
