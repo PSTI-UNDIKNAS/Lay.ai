@@ -27,7 +27,10 @@ export function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
 
   return (
     <nav className="h-screen w-64 border-r border-zinc-200 bg-white p-4 flex flex-col">
-      <div className="mb-6 text-xl font-semibold text-zinc-900">Student</div>
+      <div className="mb-6 flex items-center gap-2 text-xl font-semibold text-zinc-900">
+        <BookOpen className="h-12 w-12 text-[#5277DE]" />
+        <span className="text-xl text-[#5277DE]">LAY.AI</span>
+      </div>
       <ul className="space-y-1">
         {items.map(({ label, href, icon: Icon }) => {
           const active = pathname?.endsWith(href);
@@ -37,11 +40,16 @@ export function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
                 href={href}
                 onClick={onNavigate}
                 className={cn(
-                  'flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium text-zinc-700 hover:bg-zinc-100',
-                  active && 'bg-zinc-100 text-zinc-900',
+                  'group flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium text-zinc-700 hover:bg-[#DBE9FE] hover:text-[#1F3A89]',
+                  active && 'bg-[#DBE9FE] text-[#1F3A89]',
                 )}
               >
-                <Icon className="h-5 w-5" />
+                <Icon
+                  className={cn(
+                    'h-5 w-5 text-zinc-600 group-hover:text-[#5277DE]',
+                    active && 'text-[#5277DE]',
+                  )}
+                />
                 <span>{label}</span>
               </Link>
             </li>
@@ -59,4 +67,3 @@ export function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
 }
 
 export default Sidebar;
-

@@ -1,4 +1,4 @@
-import { BarChart3, BookOpen } from 'lucide-react';
+import { BarChart3 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 export default function DashboardHeader({ name }: { name?: string }) {
@@ -17,7 +17,6 @@ export default function DashboardHeader({ name }: { name?: string }) {
         <TabItem active icon={<BarChart3 className="h-4 w-4" />}>
           Overview
         </TabItem>
-        <TabItem icon={<BookOpen className="h-4 w-4" />}>Courses</TabItem>
       </div>
     </div>
   );
@@ -36,7 +35,7 @@ function TabItem({
     <div
       className={cn(
         'flex items-center gap-2 pb-3 text-sm font-medium',
-        active ? 'text-zinc-900 border-b-2 border-zinc-900' : 'text-zinc-600',
+        active ? 'text-[#1F3A89] border-b-2 border-[#5277DE]' : 'text-zinc-600',
       )}
     >
       {icon}
@@ -44,4 +43,3 @@ function TabItem({
     </div>
   );
 }
-

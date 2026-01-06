@@ -383,13 +383,10 @@ function CourseCard({
 
   return (
     <Card className="flex flex-col overflow-hidden" bodyClassName="p-0">
-      <div className="relative h-28 w-full bg-zinc-100">
-        <img
-          src="https://placehold.co/600x360/png?text=Course"
-          alt={course.title}
-          className="h-full w-full object-cover"
-          loading="lazy"
-        />
+      <div className="relative h-28 w-full bg-[#5277DE]">
+        <div className="flex h-full w-full items-center justify-center px-4 text-center">
+          <div className="text-2xl font-semibold text-white">Course</div>
+        </div>
       </div>
 
       <div className="flex flex-1 flex-col p-4">
