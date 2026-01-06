@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { Menu } from 'lucide-react'
+import { Menu, Shield } from 'lucide-react'
 import Sidebar from '@/components/admin/Sidebar'
 import { useRouter } from 'next/navigation'
 import { getMe } from '@/lib/auth-api'
@@ -49,7 +49,10 @@ export default function AdminShell({ children }: { children: React.ReactNode }) 
           <Menu className="h-5 w-5" />
           Menu
         </button>
-        <div className="text-base font-semibold text-zinc-900">Admin</div>
+        <div className="flex items-center gap-2 text-base font-semibold text-zinc-900">
+          <Shield className="h-5 w-5" />
+          <span>Admin Panel</span>
+        </div>
       </div>
 
       <div className="flex min-h-[calc(100vh-0px)]">
