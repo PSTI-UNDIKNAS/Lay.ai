@@ -457,3 +457,194 @@ export async function deleteGeneratedQuiz(courseId: string, quizId: string): Pro
     throw new Error(data?.error || data?.message || 'Failed to delete generated quiz');
   }
 }
+
+export interface Assignment {
+  id: string;
+  learning_unit_id: string;
+  title: string;
+  description: string;
+  due_date: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export async function getLearningUnitAssignments(unitId: string, limit = 200, offset = 0): Promise<Assignment[]> {
+  const params = new URLSearchParams();
+  if (limit != null) params.set('limit', String(limit));
+  if (offset != null) params.set('offset', String(offset));
+
+  const response = await fetch(
+    `${API_BASE_URL}/learning-units/${unitId}/assignments${params.toString() ? `?${params.toString()}` : ''}`,
+    {
+      method: 'GET',
+      headers: { Accept: 'application/json', ...getAuthHeaders() },
+    },
+  );
+
+  const data = (await response.json().catch(() => ({}))) as { assignments?: Assignment[] } & ApiError;
+  if (!response.ok) {
+    throw new Error(data?.error || data?.message || 'Failed to fetch assignments');
+  }
+
+  return Array.isArray(data?.assignments) ? (data.assignments as Assignment[]) : [];
+}
+
+export async function getMySubmittedAssignmentIdsByUnit(unitId: string): Promise<string[]> {
+  const response = await fetch(`${API_BASE_URL}/progress/units/${unitId}/assignments/submissions/me`, {
+    method: 'GET',
+    headers: { Accept: 'application/json', ...getAuthHeaders() },
+  });
+
+  const data = (await response.json().catch(() => ({}))) as { submitted_assignment_ids?: string[] } & ApiError;
+  if (!response.ok) {
+    throw new Error(data?.error || data?.message || 'Failed to fetch assignment submissions');
+  }
+
+  return Array.isArray(data?.submitted_assignment_ids) ? (data.submitted_assignment_ids as string[]) : [];
+}
+
+export interface QuizAttempt {
+  id: string;
+  quiz_id: string;
+  student_id: string;
+  score: number;
+  total_questions: number;
+  correct_answers: number;
+  created_at: string;
+}
+
+export async function getMyQuizAttemptsByUnit(unitId: string): Promise<QuizAttempt[]> {
+  const response = await fetch(`${API_BASE_URL}/progress/units/${unitId}/quizzes/submissions/me`, {
+    method: 'GET',
+    headers: { Accept: 'application/json', ...getAuthHeaders() },
+  });
+
+  const data = (await response.json().catch(() => ({}))) as { attempts?: QuizAttempt[] } & ApiError;
+  if (!response.ok) {
+    throw new Error(data?.error || data?.message || 'Failed to fetch quiz submissions');
+  }
+
+  return Array.isArray(data?.attempts) ? (data.attempts as QuizAttempt[]) : [];
+}
+
+type DashboardStatsInput = {
+  upcomingDays?: number;
+  courseLimit?: number;
+};
+
+export type StudentDashboardStats = {
+  enrolledCoursesCount: number;
+  upcomingDeadlinesCount: number;
+  achievementsCount: number;
+  submittedAssignmentsCount: number;
+  quizAttemptsCount: number;
+  upcomingDays: number;
+};
+
+async function mapLimit<T, R>(
+  items: T[],
+  limit: number,
+  fn: (item: T, index: number) => Promise<R>,
+): Promise<R[]> {
+  const results: R[] = new Array(items.length);
+  let nextIndex = 0;
+
+  const worker = async () => {
+    while (true) {
+      const current = nextIndex;
+      nextIndex += 1;
+      if (current >= items.length) return;
+      results[current] = await fn(items[current], current);
+    }
+  };
+
+  const workerCount = Math.max(1, Math.min(limit, items.length));
+  await Promise.all(Array.from({ length: workerCount }, () => worker()));
+  return results;
+}
+
+export async function fetchStudentDashboardStats(input?: DashboardStatsInput): Promise<StudentDashboardStats> {
+  const upcomingDays = input?.upcomingDays ?? 7;
+  const courseLimit = input?.courseLimit ?? 200;
+
+  const courses = await getMyCourses(courseLimit, 0);
+  const enrolledCoursesCount = courses.length;
+
+  if (enrolledCoursesCount === 0) {
+    return {
+      enrolledCoursesCount,
+      upcomingDeadlinesCount: 0,
+      achievementsCount: 0,
+      submittedAssignmentsCount: 0,
+      quizAttemptsCount: 0,
+      upcomingDays,
+    };
+  }
+
+  const unitsByCourse = await Promise.all(
+    courses.map((course) => getCourseLearningUnits(course.id, 10_000, 0).catch(() => [])),
+  );
+  const unitIds = unitsByCourse
+    .flat()
+    .map((u) => u?.id)
+    .filter((id): id is string => typeof id === 'string' && id.length > 0);
+
+  if (unitIds.length === 0) {
+    return {
+      enrolledCoursesCount,
+      upcomingDeadlinesCount: 0,
+      achievementsCount: 0,
+      submittedAssignmentsCount: 0,
+      quizAttemptsCount: 0,
+      upcomingDays,
+    };
+  }
+
+  const now = Date.now();
+  const end = now + upcomingDays * 24 * 60 * 60 * 1000;
+
+  const unitStats = await mapLimit(unitIds, 6, async (unitId) => {
+    const [assignments, submittedAssignmentIds, attempts] = await Promise.all([
+      getLearningUnitAssignments(unitId, 200, 0).catch(() => []),
+      getMySubmittedAssignmentIdsByUnit(unitId).catch(() => []),
+      getMyQuizAttemptsByUnit(unitId).catch(() => []),
+    ]);
+
+    return {
+      assignments,
+      submittedAssignmentIds: new Set(submittedAssignmentIds.filter((id) => typeof id === 'string')),
+      quizAttemptsCount: attempts.length,
+    };
+  });
+
+  let upcomingDeadlinesCount = 0;
+  let submittedAssignmentsCount = 0;
+  let quizAttemptsCount = 0;
+
+  for (const unit of unitStats) {
+    submittedAssignmentsCount += unit.submittedAssignmentIds.size;
+    quizAttemptsCount += unit.quizAttemptsCount;
+
+    for (const a of unit.assignments) {
+      if (!a || typeof a.id !== 'string') continue;
+      if (unit.submittedAssignmentIds.has(a.id)) continue;
+      if (typeof a.due_date !== 'string' || a.due_date.length === 0) continue;
+      const dueMs = Date.parse(a.due_date);
+      if (!Number.isFinite(dueMs)) continue;
+      if (dueMs >= now && dueMs <= end) {
+        upcomingDeadlinesCount += 1;
+      }
+    }
+  }
+
+  const achievementsCount = submittedAssignmentsCount + quizAttemptsCount;
+
+  return {
+    enrolledCoursesCount,
+    upcomingDeadlinesCount,
+    achievementsCount,
+    submittedAssignmentsCount,
+    quizAttemptsCount,
+    upcomingDays,
+  };
+}
