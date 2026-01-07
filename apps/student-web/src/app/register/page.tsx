@@ -2,26 +2,33 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
-import Link from 'next/link';
 
-export default function StudentLoginPage() {
+export default function StudentRegisterPage() {
   const router = useRouter();
   const [isLoading, setIsLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [formData, setFormData] = useState({
+    name: '',
     email: '',
+    uniqueIdentifier: '',
     password: '',
-    rememberMe: false,
   });
   const [formErrors, setFormErrors] = useState({
+    name: '',
     email: '',
+    uniqueIdentifier: '',
     password: '',
   });
 
   const validateForm = () => {
     let isValid = true;
-    const errors = { email: '', password: '' };
+    const errors = { name: '', email: '', uniqueIdentifier: '', password: '' };
+
+    if (!formData.name.trim()) {
+      errors.name = 'Full name is required';
+      isValid = false;
+    }
 
     if (!formData.email) {
       errors.email = 'Email is required';
@@ -31,8 +38,16 @@ export default function StudentLoginPage() {
       isValid = false;
     }
 
+    if (!formData.uniqueIdentifier.trim()) {
+      errors.uniqueIdentifier = 'Student ID is required';
+      isValid = false;
+    }
+
     if (!formData.password) {
       errors.password = 'Password is required';
+      isValid = false;
+    } else if (formData.password.length < 6) {
+      errors.password = 'Password must be at least 6 characters';
       isValid = false;
     }
 
@@ -47,52 +62,29 @@ export default function StudentLoginPage() {
     if (!validateForm()) return;
 
     setIsLoading(true);
-
     try {
-      // Call the login API
-      // Use gateway-relative API path so it works in Docker and local dev
-      const response = await fetch('/api/auth/login', {
+      const response = await fetch('/api/auth/register', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
+          name: formData.name,
           email: formData.email,
+          unique_identifier: formData.uniqueIdentifier,
           password: formData.password,
+          role: 'student',
         }),
       });
 
-      const data = await response.json();
+      const data = await response.json().catch(() => ({}));
 
-      if (response.ok) {
-        const token = data?.token;
-        const user = data?.user;
-        const role = user?.role;
-        const status = user?.status;
-
-        if (typeof token === 'string' && token && role === 'student' && status === 'active') {
-          if (formData.rememberMe) {
-            localStorage.setItem('token', token);
-            localStorage.setItem('user', JSON.stringify(user));
-          } else {
-            sessionStorage.setItem('token', token);
-            sessionStorage.setItem('user', JSON.stringify(user));
-          }
-          router.push('/dashboard');
-          return;
-        }
-
-        localStorage.removeItem('token');
-        localStorage.removeItem('user');
-        sessionStorage.removeItem('token');
-        sessionStorage.removeItem('user');
-        setError('Only active student accounts can sign in here.');
-      } else {
-        // Handle API error response
-        setError(data.message || 'Login failed. Please check your credentials.');
+      if (!response.ok) {
+        setError(data?.error || data?.message || 'Registration failed. Please try again.');
+        return;
       }
+
+      router.push('/login');
     } catch (err) {
-      console.error('Login error:', err);
+      console.error('Register error:', err);
       setError('Network error. Please check if the server is running and try again.');
     } finally {
       setIsLoading(false);
@@ -104,12 +96,28 @@ export default function StudentLoginPage() {
       <div className="w-full max-w-md">
         <div className="w-full max-w-md space-y-8 bg-white p-8 rounded-xl shadow-lg border border-zinc-200">
           <div className="text-center">
-            <h2 className="text-3xl font-bold tracking-tight text-zinc-900">Student Login</h2>
-            <p className="mt-2 text-sm text-zinc-600">Sign in to access your dashboard</p>
+            <h2 className="text-3xl font-bold tracking-tight text-zinc-900">Create Student Account</h2>
+            <p className="mt-2 text-sm text-zinc-600">Register to start learning</p>
           </div>
 
           <form className="mt-8 space-y-6" onSubmit={handleSubmit}>
             <div className="space-y-4">
+              <div className="w-full">
+                <input
+                  id="name"
+                  type="text"
+                  placeholder="Full name"
+                  className={[
+                    'flex h-10 w-full rounded-md border border-zinc-200 bg-white px-3 py-2 text-sm text-zinc-900 ring-offset-white placeholder:text-zinc-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-900 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50',
+                    formErrors.name ? 'border-red-500 focus-visible:ring-red-500' : '',
+                  ].join(' ')}
+                  value={formData.name}
+                  onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                  disabled={isLoading}
+                />
+                {formErrors.name && <p className="mt-1 text-xs text-red-500">{formErrors.name}</p>}
+              </div>
+
               <div className="w-full">
                 <input
                   id="email"
@@ -124,6 +132,24 @@ export default function StudentLoginPage() {
                   disabled={isLoading}
                 />
                 {formErrors.email && <p className="mt-1 text-xs text-red-500">{formErrors.email}</p>}
+              </div>
+
+              <div className="w-full">
+                <input
+                  id="unique_identifier"
+                  type="text"
+                  placeholder="Student ID / NIM"
+                  className={[
+                    'flex h-10 w-full rounded-md border border-zinc-200 bg-white px-3 py-2 text-sm text-zinc-900 ring-offset-white placeholder:text-zinc-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-900 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50',
+                    formErrors.uniqueIdentifier ? 'border-red-500 focus-visible:ring-red-500' : '',
+                  ].join(' ')}
+                  value={formData.uniqueIdentifier}
+                  onChange={(e) => setFormData({ ...formData, uniqueIdentifier: e.target.value })}
+                  disabled={isLoading}
+                />
+                {formErrors.uniqueIdentifier && (
+                  <p className="mt-1 text-xs text-red-500">{formErrors.uniqueIdentifier}</p>
+                )}
               </div>
 
               <div className="w-full">
@@ -150,26 +176,7 @@ export default function StudentLoginPage() {
                     {showPassword ? 'Hide' : 'Show'}
                   </button>
                 </div>
-                {formErrors.password && (
-                  <p className="mt-1 text-xs text-red-500">{formErrors.password}</p>
-                )}
-              </div>
-            </div>
-
-            <div className="flex items-center justify-between">
-              <div className="flex items-center">
-                <input
-                  id="remember-me"
-                  name="remember-me"
-                  type="checkbox"
-                  className="h-4 w-4 rounded border-zinc-300 text-zinc-900 focus:ring-zinc-900"
-                  checked={formData.rememberMe}
-                  onChange={(e) => setFormData({ ...formData, rememberMe: e.target.checked })}
-                  disabled={isLoading}
-                />
-                <label htmlFor="remember-me" className="ml-2 block text-sm text-zinc-700">
-                  Remember me
-                </label>
+                {formErrors.password && <p className="mt-1 text-xs text-red-500">{formErrors.password}</p>}
               </div>
             </div>
 
@@ -177,7 +184,7 @@ export default function StudentLoginPage() {
               <div className="rounded-md bg-red-50 p-4">
                 <div className="flex">
                   <div className="ml-3">
-                    <h3 className="text-sm font-medium text-red-800">Login failed</h3>
+                    <h3 className="text-sm font-medium text-red-800">Registration failed</h3>
                     <div className="mt-2 text-sm text-red-700">
                       <p>{error}</p>
                     </div>
@@ -194,28 +201,16 @@ export default function StudentLoginPage() {
               {isLoading ? (
                 <span className="inline-flex items-center">
                   <span className="mr-2 h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent" />
-                  Signing in
+                  Creating account
                 </span>
               ) : (
-                'Sign in'
+                'Create account'
               )}
             </button>
-
-            <div className="text-center text-sm text-zinc-600">
-              <span>Don&apos;t have an account? </span>
-              <Link href="/register" className="font-medium text-zinc-900 hover:text-zinc-700">
-                Create one!
-              </Link>
-            </div>
           </form>
-        </div>
-
-        <div className="mt-4 text-center text-sm text-zinc-600">
-          <a href="/lecturer/login" className="font-medium text-zinc-900 hover:text-zinc-700">
-            Login as lecturer?
-          </a>
         </div>
       </div>
     </div>
   );
 }
+

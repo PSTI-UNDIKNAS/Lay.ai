@@ -35,6 +35,45 @@ export async function login(email: string, password: string): Promise<LoginRespo
   return data as LoginResponse;
 }
 
+export interface RegisterRequest {
+  name: string;
+  email: string;
+  unique_identifier: string;
+  password: string;
+  role: 'student' | 'lecturer';
+}
+
+export interface RegisterResponse {
+  message: string;
+  user: {
+    id: string;
+    name: string;
+    email: string;
+    unique_identifier: string;
+    role: string;
+    status: string;
+  };
+}
+
+export async function registerUser(payload: RegisterRequest): Promise<RegisterResponse> {
+  const response = await fetch(`${API_BASE_URL}/auth/register`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Accept: 'application/json',
+    },
+    body: JSON.stringify(payload),
+  });
+
+  const data = await response.json().catch(() => ({}));
+
+  if (!response.ok) {
+    throw new Error(data?.error || data?.message || 'Registration failed');
+  }
+
+  return data as RegisterResponse;
+}
+
 export interface MeResponse {
   user: {
     id: string;

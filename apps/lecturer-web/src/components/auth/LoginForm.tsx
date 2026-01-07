@@ -2,6 +2,7 @@
 
 import * as React from 'react';
 import { useState } from 'react';
+import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { Eye, EyeOff, Lock, Mail } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -170,6 +171,14 @@ export function LoginForm() {
         <Button type="submit" className="w-full" isLoading={isLoading}>
           Sign in
         </Button>
+
+        <div className="text-center text-sm text-zinc-600">
+          <span>New here? </span>
+          <Link href="/register" className="font-medium text-zinc-900 hover:text-zinc-700">
+            Create a lecturer account
+          </Link>
+          <span> — we&apos;ll review it first.</span>
+        </div>
       </form>
     </div>
   );
