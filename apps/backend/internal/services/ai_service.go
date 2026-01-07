@@ -857,7 +857,7 @@ QUESTION:
 
 Answer:`, instruction, contextBlock, query)
 
-	// Choose a fast model for Q&A; adjust if you prefer a different one.
+	// Choose a fast model for Q&A; adjust if you prefer a different one
 	const answerModel = "gemini-3-flash-preview"
 
 	resp, err := s.client.Models.GenerateContent(ctx, answerModel, genai.Text(prompt), nil)
