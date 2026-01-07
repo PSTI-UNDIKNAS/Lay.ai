@@ -30,7 +30,7 @@ import (
 const defaultChunkSize = 1200   // approx chars per chunk
 const defaultChunkOverlap = 200 // overlap between chunks to preserve context
 const embeddingModel = "gemini-embedding-001"
-const generativeModel = "gemini-3-flash"
+const generativeModel = "gemini-3-flash-preview"
 const presignedURLExpiry = 15 * time.Minute
 
 var AvailableLenses = map[string]string{
@@ -858,7 +858,7 @@ QUESTION:
 Answer:`, instruction, contextBlock, query)
 
 	// Choose a fast model for Q&A; adjust if you prefer a different one.
-	const answerModel = "gemini-3-flash"
+	const answerModel = "gemini-3-flash-preview"
 
 	resp, err := s.client.Models.GenerateContent(ctx, answerModel, genai.Text(prompt), nil)
 	if err != nil {
